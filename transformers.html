@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transformers.js — Test des pipelines</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --panel-2: #1f232c;
+      --border: #2a2f3a;
+      --text: #e7e9ee;
+      --muted: #9aa0a6;
+      --accent: #ffb020;
+      --accent-2: #8bd17c;
+      --danger: #ff6b6b;
+      --warn: #f5c451;
+      --ok: #8bd17c;
+      --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f7f8fb;
+        --panel: #ffffff;
+        --panel-2: #f0f2f7;
+        --border: #e1e4eb;
+        --text: #1a1d24;
+        --muted: #5f6368;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    header {
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; background: var(--bg); z-index: 10;
+    }
+    header h1 { margin: 0 0 4px; font-size: 22px; }
+    header p { margin: 0; color: var(--muted); font-size: 14px; }
+    main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 64px; display: grid; gap: 16px; }
+    .grid-2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .card h2 { margin: 0 0 4px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+    .card .desc { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+    .card .model { color: var(--muted); font-size: 11px; font-family: var(--mono); margin: 0 0 12px; word-break: break-all; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+    label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
+    select, input[type="text"], input[type="number"], textarea {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-family: inherit;
+      font-size: 13px;
+      width: 100%;
+    }
+    textarea { min-height: 90px; resize: vertical; font-family: var(--mono); }
+    button {
+      background: var(--accent); color: #1a1d24; border: 0;
+      border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600;
+      cursor: pointer;
+    }
+    button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); font-weight: 500; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button:hover:not(:disabled) { filter: brightness(1.1); }
+    .output {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-height: 60px;
+      max-height: 340px;
+      overflow: auto;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 8px; font-size: 11px; border-radius: 999px;
+      background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+      font-family: var(--mono);
+    }
+    .badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .badge.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+    .badge.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .progress { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 6px 0; display: none; }
+    .progress.active { display: block; }
+    .progress > div { height: 100%; background: var(--accent); transition: width 0.2s; width: 0%; }
+    .status-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; align-items: center; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+    a { color: var(--accent); }
+    pre { margin: 6px 0 0; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+    .full { grid-column: 1 / -1; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Transformers.js — Test des pipelines</h1>
+    <p>
+      Test des pipelines <a href="https://huggingface.co/docs/transformers.js/index" target="_blank" rel="noreferrer">Transformers.js</a>
+      (modèles ONNX exécutés localement dans le navigateur via WebGPU/WASM). Les modèles se téléchargent au premier usage et sont mis en cache.
+    </p>
+  </header>
+
+  <main>
+    <section class="status-bar" id="statusBar">
+      <span class="badge" id="backendBadge"><span class="dot"></span>backend : ?</span>
+      <span class="badge" id="libBadge"><span class="dot"></span>lib : ?</span>
+      <label style="min-width: 180px;">Device
+        <select id="device">
+          <option value="auto" selected>auto</option>
+          <option value="webgpu">webgpu</option>
+          <option value="wasm">wasm</option>
+          <option value="cpu">cpu</option>
+        </select>
+      </label>
+      <label style="min-width: 140px;">Dtype
+        <select id="dtype">
+          <option value="auto" selected>auto</option>
+          <option value="fp32">fp32</option>
+          <option value="fp16">fp16</option>
+          <option value="q8">q8</option>
+          <option value="q4">q4</option>
+          <option value="q4f16">q4f16</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="grid-2">
+      <!-- TEXT GENERATION -->
+      <article class="card full" data-api="text-generation">
+        <h2>💬 Text Generation <span class="badge" data-status>—</span></h2>
+        <p class="desc">Modèle instruction-tuned (équivalent de la Prompt API). Streaming via <code>TextStreamer</code>.</p>
+        <p class="model">Modèle : <span data-model>HuggingFaceTB/SmolLM2-360M-Instruct</span></p>
+        <div class="row">
+          <label>System prompt
+            <input type="text" id="tg-system" value="Tu es un assistant utile et concis qui répond en français." />
+          </label>
+          <label style="max-width: 130px;">max_new_tokens
+            <input type="number" id="tg-max" min="16" max="2048" step="16" value="256" />
+          </label>
+          <label style="max-width: 110px;">Temperature
+            <input type="number" id="tg-temp" min="0" max="2" step="0.1" value="0.7" />
+          </label>
+          <label style="max-width: 90px;">Top-K
+            <input type="number" id="tg-topk" min="1" max="100" step="1" value="50" />
+          </label>
+        </div>
+        <label>Prompt utilisateur
+          <textarea id="tg-input">Explique en 3 phrases ce qu'est la programmation fonctionnelle.</textarea>
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="generate">Exécuter</button>
+          <button data-run="generateStream" class="secondary">Streaming</button>
+          <button data-run="disposeGen" class="secondary">Libérer</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+
+      <!-- SUMMARIZATION -->
+      <article class="card" data-api="summarization">
+        <h2>📝 Summarization <span class="badge" data-status>—</span></h2>
+        <p class="desc">Résume un texte long (modèle BART distillé).</p>
+        <p class="model">Modèle : <span data-model>Xenova/distilbart-cnn-6-6</span></p>
+        <div class="row">
+          <label style="max-width: 130px;">min_length
+            <input type="number" id="sm-min" min="1" max="500" step="1" value="30" />
+          </label>
+          <label style="max-width: 130px;">max_length
+            <input type="number" id="sm-max" min="1" max="1000" step="1" value="120" />
+          </label>
+        </div>
+        <label>Texte source
+          <textarea id="sm-input">L'intelligence artificielle transforme profondément nos sociétés. Des modèles de langage capables de raisonnement aux systèmes de vision artificielle, elle s'infiltre dans la santé, l'éducation, les transports et la création artistique. Si les promesses sont immenses — automatisation de tâches répétitives, accélération de la recherche scientifique, accessibilité accrue — les défis le sont tout autant : biais algorithmiques, coût environnemental des modèles massifs, concentration du pouvoir économique chez quelques acteurs, et questions éthiques sur l'autonomie humaine. Les régulateurs du monde entier cherchent désormais un équilibre entre innovation et protection des citoyens.</textarea>
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="summarize">Résumer</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+
+      <!-- TRANSLATION -->
+      <article class="card" data-api="translation">
+        <h2>🌐 Translation <span class="badge" data-status>—</span></h2>
+        <p class="desc">Traduction multilingue (NLLB-200, codes BCP-47 étendus).</p>
+        <p class="model">Modèle : <span data-model>Xenova/nllb-200-distilled-600M</span></p>
+        <div class="row">
+          <label>src_lang
+            <input type="text" id="tr-source" value="fra_Latn" />
+          </label>
+          <label>tgt_lang
+            <input type="text" id="tr-target" value="eng_Latn" />
+          </label>
+        </div>
+        <label>Texte à traduire
+          <textarea id="tr-input">Bonjour, pouvez-vous m'indiquer le chemin vers la gare la plus proche ?</textarea>
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="translate">Traduire</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+
+      <!-- LANGUAGE DETECTION -->
+      <article class="card" data-api="language-detection">
+        <h2>🔍 Language Detection <span class="badge" data-status>—</span></h2>
+        <p class="desc">Détecte la langue du texte (XLM-RoBERTa fine-tuné).</p>
+        <p class="model">Modèle : <span data-model>Xenova/xlm-roberta-base-language-detection</span></p>
+        <label>Texte
+          <textarea id="ld-input">Guten Tag, wie geht es Ihnen heute?</textarea>
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="detect">Détecter</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+
+      <!-- SENTIMENT / TEXT CLASSIFICATION -->
+      <article class="card" data-api="sentiment-analysis">
+        <h2>😊 Sentiment Analysis <span class="badge" data-status>—</span></h2>
+        <p class="desc">Classification binaire positif / négatif (DistilBERT SST-2).</p>
+        <p class="model">Modèle : <span data-model>Xenova/distilbert-base-uncased-finetuned-sst-2-english</span></p>
+        <label>Texte
+          <textarea id="sa-input">I absolutely love the new design, but the loading time is a bit frustrating.</textarea>
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="sentiment">Analyser</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+
+      <!-- ZERO-SHOT CLASSIFICATION -->
+      <article class="card" data-api="zero-shot-classification">
+        <h2>🎯 Zero-shot Classification <span class="badge" data-status>—</span></h2>
+        <p class="desc">Classe un texte dans des catégories libres sans entraînement.</p>
+        <p class="model">Modèle : <span data-model>Xenova/mobilebert-uncased-mnli</span></p>
+        <label>Texte
+          <textarea id="zs-input">The new camera delivers stunning photos in low light conditions.</textarea>
+        </label>
+        <label>Labels (séparés par virgule)
+          <input type="text" id="zs-labels" value="technology, food, politics, sport, entertainment" />
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="zeroshot">Classer</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+
+      <!-- QUESTION ANSWERING -->
+      <article class="card" data-api="question-answering">
+        <h2>❓ Question Answering <span class="badge" data-status>—</span></h2>
+        <p class="desc">Extraction de réponse depuis un contexte (DistilBERT SQuAD).</p>
+        <p class="model">Modèle : <span data-model>Xenova/distilbert-base-cased-distilled-squad</span></p>
+        <label>Contexte
+          <textarea id="qa-context">The Eiffel Tower was designed by Gustave Eiffel's company and built from 1887 to 1889 as the entrance arch of the 1889 World's Fair in Paris.</textarea>
+        </label>
+        <label>Question
+          <input type="text" id="qa-question" value="Who designed the Eiffel Tower?" />
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="qa">Répondre</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+
+      <!-- FEATURE EXTRACTION / EMBEDDINGS -->
+      <article class="card" data-api="feature-extraction">
+        <h2>🧭 Embeddings <span class="badge" data-status>—</span></h2>
+        <p class="desc">Similarité cosinus entre deux phrases (all-MiniLM-L6-v2).</p>
+        <p class="model">Modèle : <span data-model>Xenova/all-MiniLM-L6-v2</span></p>
+        <label>Phrase A
+          <input type="text" id="fe-a" value="A man is eating a piece of bread." />
+        </label>
+        <label>Phrase B
+          <input type="text" id="fe-b" value="Someone is having a sandwich." />
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="embed">Comparer</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+    </section>
+
+    <section class="card full">
+      <h2>🩺 Diagnostic</h2>
+      <p class="desc">Environnement d'exécution et support WebGPU / WASM.</p>
+      <div class="output" id="diag">Chargement…</div>
+    </section>
+  </main>
+
+  <script type="module">
+    import {
+      pipeline,
+      env,
+      TextStreamer,
+      cos_sim,
+    } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.2';
+
+    // Run models from the Hugging Face Hub; cached in browser storage after first load.
+    env.allowLocalModels = false;
+    env.useBrowserCache = true;
+
+    const TASKS = [
+      { key: 'text-generation',         model: 'HuggingFaceTB/SmolLM2-360M-Instruct' },
+      { key: 'summarization',           model: 'Xenova/distilbart-cnn-6-6' },
+      { key: 'translation',             model: 'Xenova/nllb-200-distilled-600M' },
+      { key: 'language-detection',      model: 'Xenova/xlm-roberta-base-language-detection', task: 'text-classification' },
+      { key: 'sentiment-analysis',      model: 'Xenova/distilbert-base-uncased-finetuned-sst-2-english', task: 'text-classification' },
+      { key: 'zero-shot-classification',model: 'Xenova/mobilebert-uncased-mnli' },
+      { key: 'question-answering',      model: 'Xenova/distilbert-base-cased-distilled-squad' },
+      { key: 'feature-extraction',      model: 'Xenova/all-MiniLM-L6-v2' },
+    ];
+
+    const pipelines = new Map();
+
+    const $ = (sel, root = document) => root.querySelector(sel);
+    const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+    function getCard(key) { return document.querySelector(`[data-api="${key}"]`); }
+    function getOut(key) { return getCard(key).querySelector('[data-output]'); }
+    function getProgress(key) { return getCard(key).querySelector('[data-progress]'); }
+    function getBadge(key) { return getCard(key).querySelector('[data-status]'); }
+    function setOutput(key, text) { getOut(key).textContent = text; }
+    function appendOutput(key, text) { getOut(key).textContent += text; }
+
+    function setBadge(el, cls, text) {
+      if (!el) return;
+      el.className = `badge ${cls}`;
+      el.innerHTML = `<span class="dot"></span>${text}`;
+    }
+
+    function showProgress(key) {
+      const prog = getProgress(key);
+      prog.classList.add('active');
+      prog.querySelector('div').style.width = '0%';
+    }
+    function setProgressWidth(key, pct) {
+      const prog = getProgress(key);
+      prog.querySelector('div').style.width = `${Math.round(pct)}%`;
+    }
+    function hideProgress(key) {
+      const prog = getProgress(key);
+      setTimeout(() => { prog.classList.remove('active'); prog.querySelector('div').style.width = '0%'; }, 500);
+    }
+
+    function resolveDeviceOpts() {
+      const device = $('#device').value;
+      const dtype = $('#dtype').value;
+      const opts = {};
+      if (device !== 'auto') opts.device = device;
+      if (dtype !== 'auto') opts.dtype = dtype;
+      return opts;
+    }
+
+    async function getPipeline(key) {
+      if (pipelines.has(key)) return pipelines.get(key);
+      const entry = TASKS.find(t => t.key === key);
+      const task = entry.task || key;
+      const model = entry.model;
+      setBadge(getBadge(key), 'warn', 'téléchargement…');
+      showProgress(key);
+      const pipe = await pipeline(task, model, {
+        ...resolveDeviceOpts(),
+        progress_callback: (data) => {
+          if (data.status === 'progress' && typeof data.progress === 'number') {
+            setProgressWidth(key, data.progress);
+          } else if (data.status === 'ready') {
+            setProgressWidth(key, 100);
+          }
+        },
+      });
+      pipelines.set(key, pipe);
+      setBadge(getBadge(key), 'ok', 'prêt');
+      hideProgress(key);
+      return pipe;
+    }
+
+    async function guard(key, fn) {
+      const out = getOut(key);
+      try {
+        out.textContent = '⏳ Chargement du modèle…';
+        await fn();
+      } catch (e) {
+        out.textContent = `❌ ${e.name || 'Error'}: ${e.message}`;
+        setBadge(getBadge(key), 'danger', 'erreur');
+        console.error(e);
+      } finally {
+        hideProgress(key);
+      }
+    }
+
+    // ---------- Text generation ----------
+    async function runGenerate(streaming = false) {
+      await guard('text-generation', async () => {
+        const pipe = await getPipeline('text-generation');
+        const messages = [];
+        const system = $('#tg-system').value.trim();
+        if (system) messages.push({ role: 'system', content: system });
+        messages.push({ role: 'user', content: $('#tg-input').value });
+
+        const genOpts = {
+          max_new_tokens: Number($('#tg-max').value),
+          temperature: Number($('#tg-temp').value),
+          top_k: Number($('#tg-topk').value),
+          do_sample: Number($('#tg-temp').value) > 0,
+          return_full_text: false,
+        };
+
+        setOutput('text-generation', '');
+        if (streaming) {
+          const streamer = new TextStreamer(pipe.tokenizer, {
+            skip_prompt: true,
+            skip_special_tokens: true,
+            callback_function: (text) => appendOutput('text-generation', text),
+          });
+          await pipe(messages, { ...genOpts, streamer });
+        } else {
+          const out = await pipe(messages, genOpts);
+          const generated = out?.[0]?.generated_text;
+          const text = Array.isArray(generated)
+            ? generated[generated.length - 1]?.content ?? JSON.stringify(generated, null, 2)
+            : String(generated ?? '');
+          setOutput('text-generation', text.trim());
+        }
+      });
+    }
+
+    // ---------- Summarization ----------
+    async function runSummarize() {
+      await guard('summarization', async () => {
+        const pipe = await getPipeline('summarization');
+        const out = await pipe($('#sm-input').value, {
+          min_length: Number($('#sm-min').value),
+          max_length: Number($('#sm-max').value),
+        });
+        setOutput('summarization', out?.[0]?.summary_text ?? JSON.stringify(out, null, 2));
+      });
+    }
+
+    // ---------- Translation ----------
+    async function runTranslate() {
+      await guard('translation', async () => {
+        const pipe = await getPipeline('translation');
+        const out = await pipe($('#tr-input').value, {
+          src_lang: $('#tr-source').value.trim(),
+          tgt_lang: $('#tr-target').value.trim(),
+        });
+        setOutput('translation', out?.[0]?.translation_text ?? JSON.stringify(out, null, 2));
+      });
+    }
+
+    // ---------- Language detection ----------
+    async function runDetect() {
+      await guard('language-detection', async () => {
+        const pipe = await getPipeline('language-detection');
+        const out = await pipe($('#ld-input').value, { top_k: 5 });
+        const lines = (Array.isArray(out) ? out : [out]).map(r =>
+          `${String(r.label).padEnd(6)} → ${(r.score * 100).toFixed(2)}%`
+        ).join('\n');
+        setOutput('language-detection', lines || '(aucune détection)');
+      });
+    }
+
+    // ---------- Sentiment ----------
+    async function runSentiment() {
+      await guard('sentiment-analysis', async () => {
+        const pipe = await getPipeline('sentiment-analysis');
+        const out = await pipe($('#sa-input').value);
+        const lines = (Array.isArray(out) ? out : [out]).map(r =>
+          `${r.label.padEnd(10)} → ${(r.score * 100).toFixed(2)}%`
+        ).join('\n');
+        setOutput('sentiment-analysis', lines);
+      });
+    }
+
+    // ---------- Zero-shot classification ----------
+    async function runZeroShot() {
+      await guard('zero-shot-classification', async () => {
+        const pipe = await getPipeline('zero-shot-classification');
+        const labels = $('#zs-labels').value.split(',').map(s => s.trim()).filter(Boolean);
+        const out = await pipe($('#zs-input').value, labels);
+        const ranked = out.labels.map((l, i) => `${l.padEnd(16)} → ${(out.scores[i] * 100).toFixed(2)}%`).join('\n');
+        setOutput('zero-shot-classification', ranked);
+      });
+    }
+
+    // ---------- Question answering ----------
+    async function runQA() {
+      await guard('question-answering', async () => {
+        const pipe = await getPipeline('question-answering');
+        const out = await pipe($('#qa-question').value, $('#qa-context').value);
+        setOutput('question-answering',
+          `Réponse : ${out.answer}\nScore   : ${(out.score * 100).toFixed(2)}%\nSpan    : [${out.start}-${out.end}]`
+        );
+      });
+    }
+
+    // ---------- Embeddings / similarity ----------
+    async function runEmbed() {
+      await guard('feature-extraction', async () => {
+        const pipe = await getPipeline('feature-extraction');
+        const [a, b] = await Promise.all([
+          pipe($('#fe-a').value, { pooling: 'mean', normalize: true }),
+          pipe($('#fe-b').value, { pooling: 'mean', normalize: true }),
+        ]);
+        const sim = cos_sim(a.data, b.data);
+        setOutput('feature-extraction',
+          `Similarité cosinus : ${sim.toFixed(4)}\nDimensions         : ${a.dims.join(' × ')}`
+        );
+      });
+    }
+
+    function disposeGen() {
+      const pipe = pipelines.get('text-generation');
+      try { pipe?.dispose?.(); } catch {}
+      pipelines.delete('text-generation');
+      setBadge(getBadge('text-generation'), 'warn', 'libéré');
+      setOutput('text-generation', 'Pipeline libéré. Prochain run = rechargement.');
+    }
+
+    // ---------- Wire up ----------
+    const ACTIONS = {
+      generate: () => runGenerate(false),
+      generateStream: () => runGenerate(true),
+      disposeGen,
+      summarize: runSummarize,
+      translate: runTranslate,
+      detect: runDetect,
+      sentiment: runSentiment,
+      zeroshot: runZeroShot,
+      qa: runQA,
+      embed: runEmbed,
+    };
+
+    $$('[data-run]').forEach(btn => {
+      btn.addEventListener('click', () => ACTIONS[btn.dataset.run]?.());
+    });
+
+    // Init badges per card
+    for (const { key } of TASKS) {
+      setBadge(getBadge(key), 'warn', 'non chargé');
+    }
+
+    // Diagnostic + top badges
+    async function fillDiag() {
+      const webgpuOk = 'gpu' in navigator;
+      let adapterInfo = '—';
+      if (webgpuOk) {
+        try {
+          const adapter = await navigator.gpu.requestAdapter();
+          adapterInfo = adapter ? (adapter.info?.vendor || 'adapter OK') : 'aucun adapter';
+        } catch (e) {
+          adapterInfo = `erreur: ${e.message}`;
+        }
+      }
+      const wasmOk = typeof WebAssembly === 'object';
+      setBadge($('#backendBadge'), webgpuOk ? 'ok' : 'warn', `WebGPU ${webgpuOk ? 'OK' : 'absent'}`);
+      setBadge($('#libBadge'), 'ok', `transformers.js ${env.version ?? '3.x'}`);
+
+      let storage = '?';
+      try {
+        const est = await navigator.storage?.estimate?.();
+        if (est) storage = `${(est.usage / 1e6).toFixed(0)} MB / ${(est.quota / 1e9).toFixed(1)} GB`;
+      } catch {}
+
+      const lines = [
+        `User-Agent      : ${navigator.userAgent}`,
+        `Plateforme      : ${navigator.platform}`,
+        `Langue          : ${navigator.language}`,
+        `WebGPU          : ${webgpuOk ? '✅' : '❌'} (${adapterInfo})`,
+        `WebAssembly     : ${wasmOk ? '✅' : '❌'}`,
+        `Cross-origin isolated : ${self.crossOriginIsolated ? '✅ (SIMD + threads actifs)' : '⚠️ non isolé (threads désactivés)'}`,
+        `Storage estimé  : ${storage}`,
+        `transformers.js : ${env.version ?? '3.x'} — backends : ${Object.keys(env.backends || {}).join(', ') || '—'}`,
+        '',
+        'Tâches configurées :',
+        ...TASKS.map(t => `  • ${t.key.padEnd(26)} → ${t.model}`),
+      ];
+      $('#diag').textContent = lines.join('\n');
+    }
+
+    fillDiag();
+  </script>
+</body>
+</html>
