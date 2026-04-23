@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chrome AI — Test des API built-in</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --panel-2: #1f232c;
+      --border: #2a2f3a;
+      --text: #e7e9ee;
+      --muted: #9aa0a6;
+      --accent: #4f8cff;
+      --accent-2: #8bd17c;
+      --danger: #ff6b6b;
+      --warn: #f5c451;
+      --ok: #8bd17c;
+      --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f7f8fb;
+        --panel: #ffffff;
+        --panel-2: #f0f2f7;
+        --border: #e1e4eb;
+        --text: #1a1d24;
+        --muted: #5f6368;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    header {
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; background: var(--bg); z-index: 10;
+    }
+    header h1 { margin: 0 0 4px; font-size: 22px; }
+    header p { margin: 0; color: var(--muted); font-size: 14px; }
+    main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 64px; display: grid; gap: 16px; }
+    .grid-2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .card h2 { margin: 0 0 4px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+    .card .desc { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+    label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
+    select, input[type="text"], input[type="number"], textarea {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-family: inherit;
+      font-size: 13px;
+      width: 100%;
+    }
+    textarea { min-height: 90px; resize: vertical; font-family: var(--mono); }
+    button {
+      background: var(--accent); color: white; border: 0;
+      border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: 500;
+      cursor: pointer;
+    }
+    button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button:hover:not(:disabled) { filter: brightness(1.1); }
+    .output {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-height: 60px;
+      max-height: 340px;
+      overflow: auto;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 8px; font-size: 11px; border-radius: 999px;
+      background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+      font-family: var(--mono);
+    }
+    .badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .badge.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+    .badge.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .progress { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 6px 0; display: none; }
+    .progress.active { display: block; }
+    .progress > div { height: 100%; background: var(--accent); transition: width 0.2s; width: 0%; }
+    .status-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+    a { color: var(--accent); }
+    details { margin-top: 8px; }
+    details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+    pre { margin: 6px 0 0; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+    .full { grid-column: 1 / -1; }
+    .inline-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+    .inline-row label { flex: 1 1 140px; }
+    .inline-row button { align-self: flex-end; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Chrome AI — Test des API built-in</h1>
+    <p>
+      Test des API proposées par Chrome (<a href="https://developer.chrome.com/docs/ai/get-started?hl=fr" target="_blank" rel="noreferrer">documentation</a>).
+      Nécessite Chrome ≥ 138 (stable) ou Canary avec les flags activés (<code>chrome://flags</code>).
+    </p>
+  </header>
+
+  <main>
+    <section class="status-bar" id="statusBar"></section>
+
+    <section class="grid-2">
+      <!-- PROMPT API -->
+      <article class="card full" data-api="LanguageModel">
+        <h2>💬 Prompt API <span class="badge" data-status>—</span></h2>
+        <p class="desc">Modèle de langage généraliste (Gemini Nano). Supporte texte, image et audio.</p>
+        <div class="row">
+          <label>System prompt
+            <input type="text" id="pm-system" value="Tu es un assistant utile et concis qui répond en français." />
+          </label>
+          <label style="max-width: 110px;">Temperature
+            <input type="number" id="pm-temp" min="0" max="2" step="0.1" value="0.8" />
+          </label>
+          <label style="max-width: 90px;">Top-K
+            <input type="number" id="pm-topk" min="1" max="40" step="1" value="3" />
+          </label>
+        </div>
+        <label>Prompt
+          <textarea id="pm-input">Explique en 3 phrases ce qu'est la programmation fonctionnelle.</textarea>
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="prompt">Exécuter</button>
+          <button data-run="promptStream" class="secondary">Streaming</button>
+          <button data-run="promptImage" class="secondary">+ Image…</button>
+          <input type="file" id="pm-image" accept="image/*" style="display:none" />
+          <button data-run="promptClear" class="secondary">Vider</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+        <div class="hint" data-ctx></div>
+      </article>
+
+      <!-- SUMMARIZER -->
+      <article class="card" data-api="Summarizer">
+        <h2>📝 Summarizer <span class="badge" data-status>—</span></h2>
+        <p class="desc">Résume un texte long en points clés, TL;DR, teaser ou titre.</p>
+        <div class="row">
+          <label>Type
+            <select id="sm-type">
+              <option value="key-points">key-points</option>
+              <option value="tldr">tldr</option>
+              <option value="teaser">teaser</option>
+              <option value="headline">headline</option>
+            </select>
+          </label>
+          <label>Format
+            <select id="sm-format">
+              <option value="markdown">markdown</option>
+              <option value="plain-text">plain-text</option>
+            </select>
+          </label>
+          <label>Longueur
+            <select id="sm-length">
+              <option value="short">short</option>
+              <option value="medium" selected>medium</option>
+              <option value="long">long</option>
+            </select>
+          </label>
+        </div>
+        <label>Texte source
+          <textarea id="sm-input">L'intelligence artificielle transforme profondément nos sociétés. Des modèles de langage capables de raisonnement aux systèmes de vision artificielle, elle s'infiltre dans la santé, l'éducation, les transports et la création artistique. Si les promesses sont immenses — automatisation de tâches répétitives, accélération de la recherche scientifique, accessibilité accrue — les défis le sont tout autant : biais algorithmiques, coût environnemental des modèles massifs, concentration du pouvoir économique chez quelques acteurs, et questions éthiques sur l'autonomie humaine. Les régulateurs du monde entier cherchent désormais un équilibre entre innovation et protection des citoyens.</textarea>
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="summarize">Résumer</button>
+          <button data-run="summarizeStream" class="secondary">Streaming</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+
+      <!-- WRITER -->
+      <article class="card" data-api="Writer">
+        <h2>✍️ Writer <span class="badge" data-status>—</span></h2>
+        <p class="desc">Génère un nouveau texte à partir d'une consigne.</p>
+        <div class="row">
+          <label>Ton
+            <select id="wr-tone">
+              <option value="neutral">neutral</option>
+              <option value="formal">formal</option>
+              <option value="casual">casual</option>
+            </select>
+          </label>
+          <label>Format
+            <select id="wr-format">
+              <option value="markdown">markdown</option>
+              <option value="plain-text">plain-text</option>
+            </select>
+          </label>
+          <label>Longueur
+            <select id="wr-length">
+              <option value="short">short</option>
+              <option value="medium" selected>medium</option>
+              <option value="long">long</option>
+            </select>
+          </label>
+        </div>
+        <label>Consigne
+          <textarea id="wr-input">Rédige un email de remerciement à un client après la livraison d'un projet.</textarea>
+        </label>
+        <label>Contexte (optionnel)
+          <input type="text" id="wr-context" value="Entreprise SaaS B2B, client grand compte." />
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="write">Écrire</button>
+          <button data-run="writeStream" class="secondary">Streaming</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+
+      <!-- REWRITER -->
+      <article class="card" data-api="Rewriter">
+        <h2>🔁 Rewriter <span class="badge" data-status>—</span></h2>
+        <p class="desc">Reformule un texte existant en ajustant ton, longueur ou format.</p>
+        <div class="row">
+          <label>Ton
+            <select id="rw-tone">
+              <option value="as-is">as-is</option>
+              <option value="more-formal">more-formal</option>
+              <option value="more-casual">more-casual</option>
+            </select>
+          </label>
+          <label>Longueur
+            <select id="rw-length">
+              <option value="as-is">as-is</option>
+              <option value="shorter">shorter</option>
+              <option value="longer">longer</option>
+            </select>
+          </label>
+          <label>Format
+            <select id="rw-format">
+              <option value="as-is">as-is</option>
+              <option value="plain-text">plain-text</option>
+              <option value="markdown">markdown</option>
+            </select>
+          </label>
+        </div>
+        <label>Texte à reformuler
+          <textarea id="rw-input">Salut, je voulais juste te dire que le truc est pas encore prêt, on regarde ça demain.</textarea>
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="rewrite">Reformuler</button>
+          <button data-run="rewriteStream" class="secondary">Streaming</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+
+      <!-- TRANSLATOR -->
+      <article class="card" data-api="Translator">
+        <h2>🌐 Translator <span class="badge" data-status>—</span></h2>
+        <p class="desc">Traduit entre deux langues (desktop uniquement).</p>
+        <div class="row">
+          <label>Langue source
+            <input type="text" id="tr-source" value="fr" />
+          </label>
+          <label>Langue cible
+            <input type="text" id="tr-target" value="en" />
+          </label>
+        </div>
+        <label>Texte à traduire
+          <textarea id="tr-input">Bonjour, pouvez-vous m'indiquer le chemin vers la gare la plus proche ?</textarea>
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="translate">Traduire</button>
+          <button data-run="translateStream" class="secondary">Streaming</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+
+      <!-- LANGUAGE DETECTOR -->
+      <article class="card" data-api="LanguageDetector">
+        <h2>🔍 Language Detector <span class="badge" data-status>—</span></h2>
+        <p class="desc">Détecte la langue d'un texte avec niveaux de confiance.</p>
+        <label>Texte
+          <textarea id="ld-input">Guten Tag, wie geht es Ihnen heute?</textarea>
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="detect">Détecter</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+
+      <!-- PROOFREADER -->
+      <article class="card" data-api="Proofreader">
+        <h2>✅ Proofreader <span class="badge" data-status>—</span></h2>
+        <p class="desc">Corrige grammaire et orthographe, retourne les corrections détaillées.</p>
+        <label>Langue attendue
+          <input type="text" id="pr-lang" value="en" />
+        </label>
+        <label>Texte à corriger
+          <textarea id="pr-input">I seen him yesterday at the store, and he bought two loafs of bread.</textarea>
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="proofread">Corriger</button>
+        </div>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+    </section>
+
+    <section class="card full">
+      <h2>🩺 Diagnostic</h2>
+      <p class="desc">Informations environnement, utile en cas de problème.</p>
+      <div class="output" id="diag">Chargement…</div>
+    </section>
+  </main>
+
+  <script type="module">
+    const APIS = [
+      { key: 'LanguageModel',   global: 'LanguageModel',   label: 'Prompt' },
+      { key: 'Summarizer',      global: 'Summarizer',      label: 'Summarizer' },
+      { key: 'Writer',          global: 'Writer',          label: 'Writer' },
+      { key: 'Rewriter',        global: 'Rewriter',        label: 'Rewriter' },
+      { key: 'Translator',      global: 'Translator',      label: 'Translator' },
+      { key: 'LanguageDetector',global: 'LanguageDetector',label: 'LanguageDetector' },
+      { key: 'Proofreader',     global: 'Proofreader',     label: 'Proofreader' },
+    ];
+
+    const $ = (sel, root = document) => root.querySelector(sel);
+    const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+    // Availability badge per API + top status bar
+    async function refreshAvailability() {
+      const bar = $('#statusBar');
+      bar.innerHTML = '';
+      for (const { key, global, label } of APIS) {
+        const supported = global in self;
+        const card = document.querySelector(`[data-api="${key}"]`);
+        const cardBadge = card?.querySelector('[data-status]');
+        const topBadge = document.createElement('span');
+        topBadge.className = 'badge';
+
+        if (!supported) {
+          setBadge(cardBadge, 'danger', 'non supporté');
+          setBadge(topBadge, 'danger', `${label}: absent`);
+          bar.appendChild(topBadge);
+          continue;
+        }
+
+        try {
+          const opts = buildAvailabilityOptions(key);
+          const status = await self[global].availability(opts);
+          const cls = status === 'available' || status === 'readily-available' ? 'ok'
+                   : status === 'unavailable' || status === 'no' ? 'danger'
+                   : 'warn';
+          setBadge(cardBadge, cls, status);
+          setBadge(topBadge, cls, `${label}: ${status}`);
+        } catch (e) {
+          setBadge(cardBadge, 'warn', 'erreur');
+          setBadge(topBadge, 'warn', `${label}: erreur`);
+        }
+        bar.appendChild(topBadge);
+      }
+    }
+
+    function buildAvailabilityOptions(key) {
+      switch (key) {
+        case 'Translator': return { sourceLanguage: 'fr', targetLanguage: 'en' };
+        case 'LanguageDetector': return {};
+        case 'Proofreader': return { expectedInputLanguages: ['en'] };
+        default: return {};
+      }
+    }
+
+    function setBadge(el, cls, text) {
+      if (!el) return;
+      el.className = `badge ${cls}`;
+      el.innerHTML = `<span class="dot"></span>${text}`;
+    }
+
+    function getCard(api) { return document.querySelector(`[data-api="${api}"]`); }
+    function getOut(api) { return getCard(api).querySelector('[data-output]'); }
+    function getProgress(api) { return getCard(api).querySelector('[data-progress]'); }
+
+    function setOutput(api, text) { getOut(api).textContent = text; }
+    function appendOutput(api, text) { getOut(api).textContent += text; }
+
+    function monitor(api) {
+      const prog = getProgress(api);
+      return (m) => {
+        prog.classList.add('active');
+        m.addEventListener('downloadprogress', (e) => {
+          prog.querySelector('div').style.width = `${Math.round(e.loaded * 100)}%`;
+        });
+      };
+    }
+    function hideProgress(api) {
+      const prog = getProgress(api);
+      setTimeout(() => { prog.classList.remove('active'); prog.querySelector('div').style.width = '0%'; }, 500);
+    }
+
+    async function guard(api, fn) {
+      const out = getOut(api);
+      try {
+        if (!(APIS.find(a => a.key === api).global in self)) {
+          out.textContent = `⚠️ ${api} non disponible. Active chrome://flags ou utilise Chrome ≥ 138.`;
+          return;
+        }
+        out.textContent = '⏳ Chargement…';
+        await fn();
+      } catch (e) {
+        out.textContent = `❌ ${e.name}: ${e.message}`;
+        console.error(e);
+      } finally {
+        hideProgress(api);
+      }
+    }
+
+    // ---------- Prompt API ----------
+    let promptSession = null;
+    async function ensurePromptSession() {
+      const system = $('#pm-system').value.trim();
+      const temperature = Number($('#pm-temp').value);
+      const topK = Number($('#pm-topk').value);
+      if (promptSession) { try { promptSession.destroy(); } catch {} }
+      promptSession = await LanguageModel.create({
+        temperature,
+        topK,
+        initialPrompts: system ? [{ role: 'system', content: system }] : undefined,
+        monitor: monitor('LanguageModel'),
+      });
+      updateContextLabel();
+    }
+    function updateContextLabel() {
+      if (!promptSession) return;
+      const ctxEl = getCard('LanguageModel').querySelector('[data-ctx]');
+      try {
+        ctxEl.textContent = `Contexte : ${promptSession.inputUsage ?? promptSession.contextUsage ?? '?'} / ${promptSession.inputQuota ?? promptSession.contextWindow ?? '?'}`;
+      } catch {}
+    }
+
+    async function runPrompt(streaming = false) {
+      await guard('LanguageModel', async () => {
+        await ensurePromptSession();
+        const input = $('#pm-input').value;
+        setOutput('LanguageModel', '');
+        if (streaming) {
+          const stream = promptSession.promptStreaming(input);
+          for await (const chunk of stream) appendOutput('LanguageModel', chunk);
+        } else {
+          const res = await promptSession.prompt(input);
+          setOutput('LanguageModel', res);
+        }
+        updateContextLabel();
+      });
+    }
+
+    async function runPromptImage() {
+      const file = $('#pm-image').files[0];
+      if (!file) { $('#pm-image').click(); return; }
+      await guard('LanguageModel', async () => {
+        if (promptSession) { try { promptSession.destroy(); } catch {} }
+        promptSession = await LanguageModel.create({
+          expectedInputs: [{ type: 'text' }, { type: 'image' }],
+          monitor: monitor('LanguageModel'),
+        });
+        const prompt = $('#pm-input').value || 'Décris cette image en français.';
+        const res = await promptSession.prompt([
+          { role: 'user', content: [
+            { type: 'text', value: prompt },
+            { type: 'image', value: file },
+          ]},
+        ]);
+        setOutput('LanguageModel', res);
+        updateContextLabel();
+      });
+    }
+    $('#pm-image').addEventListener('change', () => {
+      if ($('#pm-image').files[0]) runPromptImage();
+    });
+
+    // ---------- Summarizer ----------
+    async function runSummarize(streaming = false) {
+      await guard('Summarizer', async () => {
+        const summarizer = await Summarizer.create({
+          type: $('#sm-type').value,
+          format: $('#sm-format').value,
+          length: $('#sm-length').value,
+          monitor: monitor('Summarizer'),
+        });
+        const input = $('#sm-input').value;
+        setOutput('Summarizer', '');
+        if (streaming) {
+          const stream = summarizer.summarizeStreaming(input);
+          for await (const chunk of stream) appendOutput('Summarizer', chunk);
+        } else {
+          setOutput('Summarizer', await summarizer.summarize(input));
+        }
+        summarizer.destroy?.();
+      });
+    }
+
+    // ---------- Writer ----------
+    async function runWrite(streaming = false) {
+      await guard('Writer', async () => {
+        const writer = await Writer.create({
+          tone: $('#wr-tone').value,
+          format: $('#wr-format').value,
+          length: $('#wr-length').value,
+          monitor: monitor('Writer'),
+        });
+        const input = $('#wr-input').value;
+        const context = $('#wr-context').value || undefined;
+        setOutput('Writer', '');
+        if (streaming) {
+          const stream = writer.writeStreaming(input, { context });
+          for await (const chunk of stream) appendOutput('Writer', chunk);
+        } else {
+          setOutput('Writer', await writer.write(input, { context }));
+        }
+        writer.destroy?.();
+      });
+    }
+
+    // ---------- Rewriter ----------
+    async function runRewrite(streaming = false) {
+      await guard('Rewriter', async () => {
+        const rewriter = await Rewriter.create({
+          tone: $('#rw-tone').value,
+          length: $('#rw-length').value,
+          format: $('#rw-format').value,
+          monitor: monitor('Rewriter'),
+        });
+        const input = $('#rw-input').value;
+        setOutput('Rewriter', '');
+        if (streaming) {
+          const stream = rewriter.rewriteStreaming(input);
+          for await (const chunk of stream) appendOutput('Rewriter', chunk);
+        } else {
+          setOutput('Rewriter', await rewriter.rewrite(input));
+        }
+        rewriter.destroy?.();
+      });
+    }
+
+    // ---------- Translator ----------
+    async function runTranslate(streaming = false) {
+      await guard('Translator', async () => {
+        const translator = await Translator.create({
+          sourceLanguage: $('#tr-source').value.trim(),
+          targetLanguage: $('#tr-target').value.trim(),
+          monitor: monitor('Translator'),
+        });
+        const input = $('#tr-input').value;
+        setOutput('Translator', '');
+        if (streaming) {
+          const stream = translator.translateStreaming(input);
+          for await (const chunk of stream) appendOutput('Translator', chunk);
+        } else {
+          setOutput('Translator', await translator.translate(input));
+        }
+        translator.destroy?.();
+      });
+    }
+
+    // ---------- Language Detector ----------
+    async function runDetect() {
+      await guard('LanguageDetector', async () => {
+        const detector = await LanguageDetector.create({ monitor: monitor('LanguageDetector') });
+        const results = await detector.detect($('#ld-input').value);
+        const lines = results.slice(0, 5).map(r =>
+          `${r.detectedLanguage.padEnd(6)} → ${(r.confidence * 100).toFixed(2)}%`
+        ).join('\n');
+        setOutput('LanguageDetector', lines || '(aucune détection)');
+        detector.destroy?.();
+      });
+    }
+
+    // ---------- Proofreader ----------
+    async function runProofread() {
+      await guard('Proofreader', async () => {
+        const proofreader = await Proofreader.create({
+          expectedInputLanguages: [$('#pr-lang').value.trim() || 'en'],
+          monitor: monitor('Proofreader'),
+        });
+        const res = await proofreader.proofread($('#pr-input').value);
+        const corrections = (res.corrections || []).map(c =>
+          `[${c.startIndex}-${c.endIndex}] "${c.originalText ?? ''}" → "${c.correctedText ?? ''}"${c.explanation ? `\n  ${c.explanation}` : ''}`
+        ).join('\n');
+        setOutput('Proofreader', `✔ Corrigé :\n${res.correctedInput}\n\nCorrections :\n${corrections || '(aucune)'}`);
+        proofreader.destroy?.();
+      });
+    }
+
+    // ---------- Wire up ----------
+    const ACTIONS = {
+      prompt: () => runPrompt(false),
+      promptStream: () => runPrompt(true),
+      promptImage: () => $('#pm-image').click(),
+      promptClear: () => { if (promptSession) { try { promptSession.destroy(); } catch {} } promptSession = null; setOutput('LanguageModel', 'Session détruite.'); },
+      summarize: () => runSummarize(false),
+      summarizeStream: () => runSummarize(true),
+      write: () => runWrite(false),
+      writeStream: () => runWrite(true),
+      rewrite: () => runRewrite(false),
+      rewriteStream: () => runRewrite(true),
+      translate: () => runTranslate(false),
+      translateStream: () => runTranslate(true),
+      detect: runDetect,
+      proofread: runProofread,
+    };
+
+    $$('[data-run]').forEach(btn => {
+      btn.addEventListener('click', () => ACTIONS[btn.dataset.run]?.());
+    });
+
+    // Diagnostic
+    function fillDiag() {
+      const lines = [
+        `User-Agent         : ${navigator.userAgent}`,
+        `Plateforme         : ${navigator.platform}`,
+        `Langue             : ${navigator.language}`,
+        `userActivation     : ${navigator.userActivation?.isActive ? 'actif' : 'inactif'}`,
+        `Storage quota (GB) : ${(navigator.storage && await1(navigator.storage.estimate())) || '?'}`,
+        '',
+        'Globals détectés :',
+        ...APIS.map(a => `  • ${a.global.padEnd(18)} : ${a.global in self ? '✅' : '❌'}`),
+      ];
+      $('#diag').textContent = lines.join('\n');
+    }
+    // small sync helper (fire & update)
+    function await1(p) {
+      if (!(p instanceof Promise)) return p;
+      p.then(v => {
+        try {
+          const gb = (v.quota / 1e9).toFixed(1);
+          $('#diag').textContent = $('#diag').textContent.replace('?', `${gb} GB`);
+        } catch {}
+      });
+      return '?';
+    }
+
+    fillDiag();
+    refreshAvailability();
+  </script>
+</body>
+</html>
