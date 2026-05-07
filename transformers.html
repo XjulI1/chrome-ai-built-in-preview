@@ -282,6 +282,65 @@
         <div class="output" data-output>En attente…</div>
       </article>
 
+      <!-- AUTOMATIC SPEECH RECOGNITION (Whisper) -->
+      <article class="card full" data-api="automatic-speech-recognition">
+        <h2>🎙️ Speech-to-Text (Whisper) <span class="badge" data-status>—</span></h2>
+        <p class="desc">
+          Transcription audio 100&nbsp;% offline (Whisper ONNX). Enregistrement micro ou import de fichier audio.
+          Le modèle se télécharge au premier usage (~40&nbsp;Mo pour <code>tiny</code>, ~150&nbsp;Mo pour <code>base</code>) puis est mis en cache.
+        </p>
+        <p class="model">Modèle : <span data-model>onnx-community/whisper-base</span></p>
+        <div class="row">
+          <label>Modèle
+            <select id="asr-model">
+              <option value="onnx-community/whisper-tiny">whisper-tiny (multilingue, ~40 Mo)</option>
+              <option value="onnx-community/whisper-base" selected>whisper-base (multilingue, ~150 Mo)</option>
+              <option value="Xenova/whisper-tiny.en">whisper-tiny.en (anglais, ~40 Mo)</option>
+              <option value="Xenova/whisper-small">whisper-small (multilingue, ~480 Mo)</option>
+            </select>
+          </label>
+          <label>Langue
+            <select id="asr-lang">
+              <option value="">auto</option>
+              <option value="french" selected>french</option>
+              <option value="english">english</option>
+              <option value="spanish">spanish</option>
+              <option value="german">german</option>
+              <option value="italian">italian</option>
+              <option value="portuguese">portuguese</option>
+              <option value="dutch">dutch</option>
+              <option value="japanese">japanese</option>
+              <option value="chinese">chinese</option>
+            </select>
+          </label>
+          <label>Tâche
+            <select id="asr-task">
+              <option value="transcribe" selected>transcribe</option>
+              <option value="translate">translate (→ english)</option>
+            </select>
+          </label>
+          <label style="max-width: 130px;">return_timestamps
+            <select id="asr-ts">
+              <option value="false">false</option>
+              <option value="true" selected>true</option>
+              <option value="word">word</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <button data-run="asrRecord">⏺ Enregistrer</button>
+          <button data-run="asrStop" class="secondary" disabled>⏹ Stop & transcrire</button>
+          <button data-run="asrPickFile" class="secondary">📁 Fichier audio…</button>
+          <input type="file" id="asr-file" accept="audio/*" style="display:none" />
+          <button data-run="asrDispose" class="secondary">Libérer</button>
+          <span class="badge" id="asr-state"><span class="dot"></span>idle</span>
+        </div>
+        <audio id="asr-preview" controls style="width:100%; margin-top:8px; display:none;"></audio>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+        <div class="hint">Whisper attend un signal mono 16&nbsp;kHz : la décodage + ré-échantillonnage est fait via <code>AudioContext</code> avant l'inférence.</div>
+      </article>
+
       <!-- FEATURE EXTRACTION / EMBEDDINGS -->
       <article class="card" data-api="feature-extraction">
         <h2>🧭 Embeddings <span class="badge" data-status>—</span></h2>
@@ -329,6 +388,7 @@
       { key: 'zero-shot-classification',model: 'Xenova/mobilebert-uncased-mnli' },
       { key: 'question-answering',      model: 'Xenova/distilbert-base-cased-distilled-squad' },
       { key: 'feature-extraction',      model: 'Xenova/all-MiniLM-L6-v2' },
+      { key: 'automatic-speech-recognition', model: 'onnx-community/whisper-base', dynamicModel: true },
     ];
 
     const pipelines = new Map();
@@ -530,6 +590,146 @@
       });
     }
 
+    // ---------- Automatic Speech Recognition (Whisper) ----------
+    let asrMediaRecorder = null;
+    let asrMediaChunks = [];
+    let asrMediaStream = null;
+    let asrCurrentModel = null;
+    const asrStateEl = () => $('#asr-state');
+    function setAsrState(text, cls = '') {
+      const el = asrStateEl();
+      el.className = `badge ${cls}`;
+      el.innerHTML = `<span class="dot"></span>${text}`;
+    }
+
+    async function getAsrPipeline() {
+      const model = $('#asr-model').value;
+      if (asrCurrentModel && asrCurrentModel !== model) {
+        const old = pipelines.get('automatic-speech-recognition');
+        try { old?.dispose?.(); } catch {}
+        pipelines.delete('automatic-speech-recognition');
+      }
+      asrCurrentModel = model;
+      getCard('automatic-speech-recognition').querySelector('[data-model]').textContent = model;
+      if (pipelines.has('automatic-speech-recognition')) return pipelines.get('automatic-speech-recognition');
+
+      setBadge(getBadge('automatic-speech-recognition'), 'warn', 'téléchargement…');
+      showProgress('automatic-speech-recognition');
+      const pipe = await pipeline('automatic-speech-recognition', model, {
+        ...resolveDeviceOpts(),
+        progress_callback: (data) => {
+          if (data.status === 'progress' && typeof data.progress === 'number') {
+            setProgressWidth('automatic-speech-recognition', data.progress);
+          } else if (data.status === 'ready') {
+            setProgressWidth('automatic-speech-recognition', 100);
+          }
+        },
+      });
+      pipelines.set('automatic-speech-recognition', pipe);
+      setBadge(getBadge('automatic-speech-recognition'), 'ok', 'prêt');
+      hideProgress('automatic-speech-recognition');
+      return pipe;
+    }
+
+    async function decodeBlobTo16kMono(blob) {
+      const arrayBuf = await blob.arrayBuffer();
+      const AC = self.OfflineAudioContext || self.webkitOfflineAudioContext;
+      const tmpCtx = new (self.AudioContext || self.webkitAudioContext)();
+      const decoded = await tmpCtx.decodeAudioData(arrayBuf.slice(0));
+      tmpCtx.close();
+      const target = 16000;
+      const length = Math.ceil(decoded.duration * target);
+      const offline = new AC(1, length, target);
+      const src = offline.createBufferSource();
+      src.buffer = decoded;
+      src.connect(offline.destination);
+      src.start(0);
+      const rendered = await offline.startRendering();
+      return rendered.getChannelData(0);
+    }
+
+    async function asrTranscribe(blob) {
+      await guard('automatic-speech-recognition', async () => {
+        setAsrState('décodage…', 'warn');
+        const audio = await decodeBlobTo16kMono(blob);
+        setAsrState('inférence…', 'warn');
+        const pipe = await getAsrPipeline();
+
+        const lang = $('#asr-lang').value;
+        const task = $('#asr-task').value;
+        const tsRaw = $('#asr-ts').value;
+        const return_timestamps = tsRaw === 'true' ? true : tsRaw === 'word' ? 'word' : false;
+
+        const opts = { chunk_length_s: 30, stride_length_s: 5, return_timestamps };
+        if (lang) opts.language = lang;
+        if (task) opts.task = task;
+
+        const out = await pipe(audio, opts);
+        let text = out?.text ?? JSON.stringify(out, null, 2);
+        if (return_timestamps && Array.isArray(out?.chunks) && out.chunks.length) {
+          const chunks = out.chunks.map(c => {
+            const [a, b] = c.timestamp || [];
+            const ts = (a != null && b != null) ? `[${a.toFixed(2)}-${b.toFixed(2)}] ` : '';
+            return `${ts}${c.text}`;
+          }).join('\n');
+          text = `${out.text.trim()}\n\n— Segments —\n${chunks}`;
+        }
+        setOutput('automatic-speech-recognition', text.trim());
+        setAsrState('idle');
+      });
+    }
+
+    async function asrRecord() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setOutput('automatic-speech-recognition', '⚠️ getUserMedia non disponible.');
+        return;
+      }
+      try {
+        asrMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (e) {
+        setOutput('automatic-speech-recognition', `❌ Micro refusé : ${e.message}`);
+        return;
+      }
+      asrMediaChunks = [];
+      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : '';
+      asrMediaRecorder = new MediaRecorder(asrMediaStream, mime ? { mimeType: mime } : undefined);
+      asrMediaRecorder.ondataavailable = (e) => { if (e.data.size) asrMediaChunks.push(e.data); };
+      asrMediaRecorder.onstop = async () => {
+        asrMediaStream?.getTracks().forEach(t => t.stop());
+        const blob = new Blob(asrMediaChunks, { type: asrMediaRecorder.mimeType || 'audio/webm' });
+        const preview = $('#asr-preview');
+        preview.src = URL.createObjectURL(blob);
+        preview.style.display = 'block';
+        await asrTranscribe(blob);
+      };
+      asrMediaRecorder.start();
+      setAsrState('rec…', 'danger');
+      $('[data-run="asrRecord"]').disabled = true;
+      $('[data-run="asrStop"]').disabled = false;
+      setOutput('automatic-speech-recognition', '🔴 Enregistrement en cours…');
+    }
+
+    function asrStop() {
+      try { asrMediaRecorder?.stop(); } catch {}
+      $('[data-run="asrRecord"]').disabled = false;
+      $('[data-run="asrStop"]').disabled = true;
+    }
+
+    function asrPickFile() {
+      const input = $('#asr-file');
+      input.value = '';
+      input.click();
+    }
+
+    function asrDispose() {
+      const pipe = pipelines.get('automatic-speech-recognition');
+      try { pipe?.dispose?.(); } catch {}
+      pipelines.delete('automatic-speech-recognition');
+      asrCurrentModel = null;
+      setBadge(getBadge('automatic-speech-recognition'), 'warn', 'libéré');
+      setOutput('automatic-speech-recognition', 'Pipeline libéré. Prochain run = rechargement.');
+    }
+
     function disposeGen() {
       const pipe = pipelines.get('text-generation');
       try { pipe?.dispose?.(); } catch {}
@@ -550,7 +750,23 @@
       zeroshot: runZeroShot,
       qa: runQA,
       embed: runEmbed,
+      asrRecord,
+      asrStop,
+      asrPickFile,
+      asrDispose,
     };
+
+    // ASR file picker wiring
+    queueMicrotask(() => {
+      $('#asr-file')?.addEventListener('change', async () => {
+        const file = $('#asr-file').files[0];
+        if (!file) return;
+        const preview = $('#asr-preview');
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = 'block';
+        await asrTranscribe(file);
+      });
+    });
 
     $$('[data-run]').forEach(btn => {
       btn.addEventListener('click', () => ACTIONS[btn.dataset.run]?.());

@@ -319,6 +319,90 @@
         <div class="progress" data-progress><div></div></div>
         <div class="output" data-output>En attente…</div>
       </article>
+
+      <!-- VOICE CHAT (Web Speech API + Prompt API) -->
+      <article class="card full" data-api="VoiceChat">
+        <h2>🎙️ Voice Chat <span class="badge" data-status>—</span></h2>
+        <p class="desc">
+          Boucle conversationnelle in-browser via 3 étapes :
+          <code>SpeechRecognition</code> (voix → texte) → <code>LanguageModel</code> (Gemini Nano, texte → réponse) → <code>SpeechSynthesis</code> (texte → voix).
+        </p>
+        <details open style="margin: 0 0 12px;">
+          <summary style="font-size: 12px;">⚙️ Local vs Internet — détail par étape</summary>
+          <div style="font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.55;">
+            <p style="margin: 0 0 6px;"><strong style="color: var(--text);">1. <code>SpeechRecognition</code> — STT</strong> &nbsp;<span class="badge warn">réseau probable</span></p>
+            <ul style="margin: 0 0 10px 18px; padding: 0;">
+              <li>Sur Chrome / Edge : <code>webkitSpeechRecognition</code> envoie typiquement l'audio aux serveurs Google pour transcription.</li>
+              <li>Firefox : non supporté. Safari : services Apple (réseau).</li>
+              <li>Pour du 100&nbsp;% offline → utiliser la card Whisper (ONNX, WebGPU/WASM) dans <code>transformers.html</code>.</li>
+            </ul>
+            <p style="margin: 0 0 6px;"><strong style="color: var(--text);">2. <code>LanguageModel</code> (Gemini Nano) — LLM</strong> &nbsp;<span class="badge ok">100% local</span></p>
+            <ul style="margin: 0 0 10px 18px; padding: 0;">
+              <li>Modèle embarqué dans Chrome, téléchargé une seule fois via <code>chrome://components</code>.</li>
+              <li>Aucune requête sortante au moment du <code>session.prompt()</code>. System prompt, temperature et historique restent dans le renderer.</li>
+            </ul>
+            <p style="margin: 0 0 6px;"><strong style="color: var(--text);">3. <code>SpeechSynthesis</code> — TTS</strong> &nbsp;<span class="badge warn">variable selon la voix</span></p>
+            <ul style="margin: 0 0 10px 18px; padding: 0;">
+              <li>Voix système (ex. macOS « Thomas », « Amelie ») : 100&nbsp;% offline.</li>
+              <li>Voix « réseau » (ex. <em>Google français</em>, <em>Microsoft Online</em>) : streaming depuis Google/Microsoft.</li>
+              <li><code>getVoices()</code> n'expose pas toujours le flag <code>localService</code> ; pour garantir l'offline, choisir explicitement une voix système.</li>
+            </ul>
+            <p style="margin: 0;"><strong style="color: var(--text);">Micro &amp; permissions</strong> : <code>getUserMedia</code> est purement local (autorisation OS/navigateur), aucune donnée ne sort par ce biais. Les seuls passages réseau viennent des implémentations browser des Web Speech APIs.</p>
+          </div>
+        </details>
+        <div class="row">
+          <label>Langue
+            <select id="vc-lang">
+              <option value="fr-FR" selected>fr-FR</option>
+              <option value="en-US">en-US</option>
+              <option value="es-ES">es-ES</option>
+              <option value="de-DE">de-DE</option>
+              <option value="it-IT">it-IT</option>
+            </select>
+          </label>
+          <label>Voix de synthèse
+            <select id="vc-voice"></select>
+          </label>
+          <label style="max-width: 110px;">Temperature
+            <input type="number" id="vc-temp" min="0" max="2" step="0.1" value="0.7" />
+          </label>
+          <label style="flex: 1 1 240px;">System prompt
+            <input type="text" id="vc-system" value="Tu es un assistant vocal. Réponds en français, en 1 ou 2 phrases courtes adaptées à l'oral." />
+          </label>
+        </div>
+        <div class="row">
+          <button data-run="voiceStart">🎤 Parler</button>
+          <button data-run="voiceStop" class="secondary" disabled>⏹ Stop</button>
+          <button data-run="voiceReset" class="secondary">Nouvelle session</button>
+          <span class="badge" id="vc-state"><span class="dot"></span>idle</span>
+        </div>
+        <div class="output" data-output style="max-height: 260px;">En attente…</div>
+        <div class="hint">Astuce&nbsp;: le bouton « Parler » doit être cliqué (geste utilisateur requis pour le micro et la synthèse vocale).</div>
+      </article>
+
+      <!-- AUDIO PROMPT (multimodal) -->
+      <article class="card full" data-api="AudioPrompt">
+        <h2>🔊 Audio → Prompt API (multimodal) <span class="badge" data-status>—</span></h2>
+        <p class="desc">
+          Enregistre directement un blob audio et le passe au modèle via <code>expectedInputs: [{ type: 'audio' }]</code>.
+          Pas de transcription préalable — le modèle « écoute » l'audio.
+          Nécessite Chrome Canary récent + <code>chrome://flags/#prompt-api-for-gemini-nano-multimodal-input</code>.
+        </p>
+        <label>Consigne
+          <textarea id="ap-input" style="min-height: 60px;">Transcris fidèlement ce qui est dit, puis donne un résumé en une phrase.</textarea>
+        </label>
+        <div class="row" style="margin-top: 8px;">
+          <button data-run="audioRecord">⏺ Enregistrer</button>
+          <button data-run="audioStop" class="secondary" disabled>⏹ Stop & analyser</button>
+          <button data-run="audioPickFile" class="secondary">📁 Fichier audio…</button>
+          <input type="file" id="ap-file" accept="audio/*" style="display:none" />
+          <span class="badge" id="ap-state"><span class="dot"></span>idle</span>
+        </div>
+        <audio id="ap-preview" controls style="width:100%; margin-top:8px; display:none;"></audio>
+        <div class="progress" data-progress><div></div></div>
+        <div class="output" data-output>En attente…</div>
+      </article>
+
     </section>
 
     <section class="card full">
@@ -337,6 +421,7 @@
       { key: 'Translator',      global: 'Translator',      label: 'Translator' },
       { key: 'LanguageDetector',global: 'LanguageDetector',label: 'LanguageDetector' },
       { key: 'Proofreader',     global: 'Proofreader',     label: 'Proofreader' },
+      { key: 'AudioPrompt',     global: 'LanguageModel',   label: 'Audio Prompt' },
     ];
 
     const $ = (sel, root = document) => root.querySelector(sel);
@@ -631,6 +716,261 @@
       });
     }
 
+    // ---------- Voice Chat (SpeechRecognition + LanguageModel + SpeechSynthesis) ----------
+    const SR = self.SpeechRecognition || self.webkitSpeechRecognition;
+    let voiceRecognition = null;
+    let voiceSession = null;
+    let voiceTranscript = '';
+    const vcStateEl = () => $('#vc-state');
+    const vcOut = () => getOut('VoiceChat');
+
+    function setVcState(text, cls = '') {
+      const el = vcStateEl();
+      el.className = `badge ${cls}`;
+      el.innerHTML = `<span class="dot"></span>${text}`;
+    }
+
+    function appendVcLine(prefix, text) {
+      vcOut().textContent += `${vcOut().textContent && !vcOut().textContent.endsWith('\n') ? '\n' : ''}${prefix} ${text}\n`;
+      vcOut().scrollTop = vcOut().scrollHeight;
+    }
+
+    function refreshVoiceCardStatus() {
+      const card = getCard('VoiceChat');
+      const badge = card.querySelector('[data-status]');
+      const sttOk = !!SR;
+      const ttsOk = 'speechSynthesis' in self;
+      const llmOk = 'LanguageModel' in self;
+      const ok = sttOk && ttsOk && llmOk;
+      setBadge(badge, ok ? 'ok' : 'warn',
+        ok ? 'prêt' : `manque: ${[!sttOk && 'STT', !ttsOk && 'TTS', !llmOk && 'LLM'].filter(Boolean).join(', ')}`);
+    }
+
+    function populateVoices() {
+      const sel = $('#vc-voice');
+      const lang = $('#vc-lang').value;
+      const voices = speechSynthesis.getVoices();
+      const filtered = voices.filter(v => v.lang.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase()));
+      sel.innerHTML = '';
+      const opt = document.createElement('option');
+      opt.value = ''; opt.textContent = '(par défaut)';
+      sel.appendChild(opt);
+      for (const v of (filtered.length ? filtered : voices)) {
+        const o = document.createElement('option');
+        o.value = v.name;
+        o.textContent = `${v.name} (${v.lang})${v.default ? ' ★' : ''}`;
+        sel.appendChild(o);
+      }
+    }
+    if ('speechSynthesis' in self) {
+      speechSynthesis.onvoiceschanged = populateVoices;
+    }
+
+    async function ensureVoiceSession() {
+      if (voiceSession) return voiceSession;
+      const system = $('#vc-system').value.trim();
+      const temperature = Number($('#vc-temp').value);
+      voiceSession = await LanguageModel.create({
+        temperature,
+        topK: 3,
+        initialPrompts: system ? [{ role: 'system', content: system }] : undefined,
+      });
+      return voiceSession;
+    }
+
+    function speak(text) {
+      return new Promise((resolve) => {
+        if (!('speechSynthesis' in self)) return resolve();
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = $('#vc-lang').value;
+        const voiceName = $('#vc-voice').value;
+        if (voiceName) {
+          const voice = speechSynthesis.getVoices().find(v => v.name === voiceName);
+          if (voice) u.voice = voice;
+        }
+        u.onend = resolve;
+        u.onerror = resolve;
+        speechSynthesis.speak(u);
+      });
+    }
+
+    async function voiceStart() {
+      if (!SR) {
+        setOutput('VoiceChat', '⚠️ SpeechRecognition non supporté dans ce navigateur.');
+        return;
+      }
+      if (!('LanguageModel' in self)) {
+        setOutput('VoiceChat', '⚠️ LanguageModel absent. Active le flag Prompt API.');
+        return;
+      }
+      if (vcOut().textContent === 'En attente…') vcOut().textContent = '';
+      setVcState('écoute…', 'ok');
+      $('[data-run="voiceStart"]').disabled = true;
+      $('[data-run="voiceStop"]').disabled = false;
+
+      voiceRecognition = new SR();
+      voiceRecognition.lang = $('#vc-lang').value;
+      voiceRecognition.interimResults = false;
+      voiceRecognition.continuous = false;
+
+      voiceRecognition.onresult = async (e) => {
+        const transcript = e.results[0][0].transcript;
+        appendVcLine('🧑', transcript);
+        setVcState('réflexion…', 'warn');
+        try {
+          const session = await ensureVoiceSession();
+          const reply = await session.prompt(transcript);
+          appendVcLine('🤖', reply);
+          setVcState('parle…', 'ok');
+          await speak(reply);
+        } catch (err) {
+          appendVcLine('❌', `${err.name}: ${err.message}`);
+        } finally {
+          setVcState('idle');
+          $('[data-run="voiceStart"]').disabled = false;
+          $('[data-run="voiceStop"]').disabled = true;
+        }
+      };
+      voiceRecognition.onerror = (e) => {
+        appendVcLine('❌', `recognition: ${e.error}`);
+        setVcState('idle');
+        $('[data-run="voiceStart"]').disabled = false;
+        $('[data-run="voiceStop"]').disabled = true;
+      };
+      voiceRecognition.onend = () => {
+        if (vcStateEl().textContent.includes('écoute')) {
+          setVcState('idle');
+          $('[data-run="voiceStart"]').disabled = false;
+          $('[data-run="voiceStop"]').disabled = true;
+        }
+      };
+      voiceRecognition.start();
+    }
+
+    function voiceStop() {
+      try { voiceRecognition?.stop(); } catch {}
+      try { speechSynthesis.cancel(); } catch {}
+      setVcState('idle');
+      $('[data-run="voiceStart"]').disabled = false;
+      $('[data-run="voiceStop"]').disabled = true;
+    }
+
+    function voiceReset() {
+      voiceStop();
+      if (voiceSession) { try { voiceSession.destroy(); } catch {} }
+      voiceSession = null;
+      voiceTranscript = '';
+      setOutput('VoiceChat', 'Nouvelle session.');
+    }
+
+    // ---------- Audio Prompt (Prompt API multimodale) ----------
+    let mediaRecorder = null;
+    let mediaChunks = [];
+    let mediaStream = null;
+    const apStateEl = () => $('#ap-state');
+    function setApState(text, cls = '') {
+      const el = apStateEl();
+      el.className = `badge ${cls}`;
+      el.innerHTML = `<span class="dot"></span>${text}`;
+    }
+
+    async function refreshAudioPromptStatus() {
+      const card = getCard('AudioPrompt');
+      const badge = card.querySelector('[data-status]');
+      if (!('LanguageModel' in self)) {
+        setBadge(badge, 'danger', 'LanguageModel absent');
+        return;
+      }
+      try {
+        const status = await LanguageModel.availability({ expectedInputs: [{ type: 'audio' }] });
+        const cls = status === 'available' || status === 'readily-available' ? 'ok'
+                 : status === 'unavailable' || status === 'no' ? 'danger' : 'warn';
+        setBadge(badge, cls, status);
+      } catch (e) {
+        setBadge(badge, 'warn', 'erreur');
+      }
+    }
+
+    async function audioRecord() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setOutput('AudioPrompt', '⚠️ getUserMedia non disponible.');
+        return;
+      }
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (e) {
+        setOutput('AudioPrompt', `❌ Micro refusé : ${e.message}`);
+        return;
+      }
+      mediaChunks = [];
+      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : '';
+      mediaRecorder = new MediaRecorder(mediaStream, mime ? { mimeType: mime } : undefined);
+      mediaRecorder.ondataavailable = (e) => { if (e.data.size) mediaChunks.push(e.data); };
+      mediaRecorder.onstop = async () => {
+        mediaStream?.getTracks().forEach(t => t.stop());
+        const blob = new Blob(mediaChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+        const preview = $('#ap-preview');
+        preview.src = URL.createObjectURL(blob);
+        preview.style.display = 'block';
+        await analyseAudio(blob);
+      };
+      mediaRecorder.start();
+      setApState('rec…', 'danger');
+      $('[data-run="audioRecord"]').disabled = true;
+      $('[data-run="audioStop"]').disabled = false;
+      setOutput('AudioPrompt', '🔴 Enregistrement…');
+    }
+
+    function audioStop() {
+      try { mediaRecorder?.stop(); } catch {}
+      $('[data-run="audioRecord"]').disabled = false;
+      $('[data-run="audioStop"]').disabled = true;
+      setApState('analyse…', 'warn');
+    }
+
+    async function analyseAudio(blob) {
+      await guard('AudioPrompt', async () => {
+        const session = await LanguageModel.create({
+          expectedInputs: [{ type: 'audio' }],
+          monitor: monitor('AudioPrompt'),
+        });
+        const prompt = $('#ap-input').value || 'Transcris cet audio.';
+        setOutput('AudioPrompt', '⏳ Analyse de l\'audio…');
+        const res = await session.prompt([
+          { role: 'user', content: [
+            { type: 'text', value: prompt },
+            { type: 'audio', value: blob },
+          ]},
+        ]);
+        setOutput('AudioPrompt', res);
+        try { session.destroy(); } catch {}
+        setApState('idle');
+      });
+    }
+
+    function audioPickFile() {
+      const input = $('#ap-file');
+      input.value = '';
+      input.click();
+    }
+    document.addEventListener('DOMContentLoaded', () => {});
+    // attach late so the elements exist
+    queueMicrotask(() => {
+      $('#ap-file')?.addEventListener('change', async () => {
+        const file = $('#ap-file').files[0];
+        if (!file) return;
+        const preview = $('#ap-preview');
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = 'block';
+        await analyseAudio(file);
+      });
+      $('#vc-lang')?.addEventListener('change', populateVoices);
+      populateVoices();
+      refreshVoiceCardStatus();
+      refreshAudioPromptStatus();
+    });
+
     // ---------- Wire up ----------
     const ACTIONS = {
       prompt: () => runPrompt(false),
@@ -647,6 +987,12 @@
       translateStream: () => runTranslate(true),
       detect: runDetect,
       proofread: runProofread,
+      voiceStart,
+      voiceStop,
+      voiceReset,
+      audioRecord,
+      audioStop,
+      audioPickFile,
     };
 
     $$('[data-run]').forEach(btn => {

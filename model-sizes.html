@@ -1,0 +1,670 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tailles de modèles — Tiny vs Frontier</title>
+    <style>
+      :root {
+        --bg: #0b0f1a;
+        --panel: #121828;
+        --panel-2: #0e1322;
+        --border: #1f2940;
+        --fg: #e6ecff;
+        --muted: #8b97b8;
+        --tiny: #34d399;
+        --mid: #60a5fa;
+        --frontier: #f472b6;
+        --warn: #fbbf24;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+        background: radial-gradient(
+            1200px 600px at 20% -10%,
+            #1a2342 0%,
+            var(--bg) 60%
+          )
+          fixed;
+        color: var(--fg);
+        line-height: 1.55;
+        min-height: 100vh;
+      }
+      header {
+        max-width: 2500px;
+        margin: 0 auto;
+        padding: 48px 24px 16px;
+      }
+      h1 {
+        font-size: clamp(1.6rem, 2.6vw, 2.4rem);
+        margin: 0 0 8px;
+        letter-spacing: -0.02em;
+      }
+      header p {
+        color: var(--muted);
+        margin: 0;
+        max-width: 70ch;
+      }
+      main {
+        max-width: 2500px;
+        margin: 0 auto;
+        padding: 16px 24px 64px;
+        display: grid;
+        gap: 24px;
+      }
+      .card {
+        background: linear-gradient(
+          180deg,
+          var(--panel) 0%,
+          var(--panel-2) 100%
+        );
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 24px;
+      }
+      .card h2 {
+        margin: 0 0 4px;
+        font-size: 1.15rem;
+      }
+      .card .sub {
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin: 0 0 20px;
+      }
+      .legend {
+        display: flex;
+        gap: 18px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+        font-size: 0.88rem;
+        color: var(--muted);
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .swatch {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+      }
+      .swatch.tiny {
+        background: var(--tiny);
+      }
+      .swatch.mid {
+        background: var(--mid);
+      }
+      .swatch.frontier {
+        background: var(--frontier);
+      }
+
+      /* Bar chart (log scale) */
+      .bars {
+        display: grid;
+        grid-template-columns: 220px 1fr 110px;
+        gap: 6px 14px;
+        align-items: center;
+      }
+      .bars .row {
+        display: contents;
+      }
+      .bars .name {
+        font-size: 0.92rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .bars .name small {
+        display: block;
+        color: var(--muted);
+        font-size: 0.74rem;
+        font-weight: normal;
+      }
+      .bars .track {
+        position: relative;
+        height: 22px;
+        background: rgba(255, 255, 255, 0.04);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .bars .fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        border-radius: 6px;
+        background: var(--mid);
+      }
+      .bars .fill.tiny {
+        background: linear-gradient(90deg, #34d399, #22c55e);
+      }
+      .bars .fill.mid {
+        background: linear-gradient(90deg, #60a5fa, #3b82f6);
+      }
+      .bars .fill.frontier {
+        background: linear-gradient(90deg, #f472b6, #db2777);
+      }
+      .bars .value {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+      .bars .value strong {
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .axis {
+        margin-top: 14px;
+        display: grid;
+        grid-template-columns: 220px 1fr 110px;
+        gap: 14px;
+        color: var(--muted);
+        font-size: 0.74rem;
+      }
+      .axis .ticks {
+        position: relative;
+        height: 18px;
+        border-top: 1px dashed rgba(255, 255, 255, 0.1);
+      }
+      .axis .tick {
+        position: absolute;
+        top: 2px;
+        transform: translateX(-50%);
+      }
+
+      /* Bubbles */
+      .bubbles-wrap {
+        overflow-x: auto;
+      }
+      svg.bubbles {
+        width: 100%;
+        height: 360px;
+        display: block;
+      }
+      .bubble-label {
+        fill: var(--fg);
+        font-size: 11px;
+        text-anchor: middle;
+        pointer-events: none;
+      }
+      .bubble-sub {
+        fill: var(--muted);
+        font-size: 10px;
+        text-anchor: middle;
+        pointer-events: none;
+      }
+      .group-label {
+        fill: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      /* Ratio callout */
+      .callout {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+      }
+      .stat {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .stat .num {
+        font-size: 1.8rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .stat .lbl {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .note {
+        color: var(--muted);
+        font-size: 0.82rem;
+        border-left: 3px solid var(--warn);
+        padding: 8px 12px;
+        background: rgba(251, 191, 36, 0.06);
+        border-radius: 0 8px 8px 0;
+      }
+      a {
+        color: #93c5fd;
+      }
+
+      @media (max-width: 720px) {
+        .bars,
+        .axis {
+          grid-template-columns: 130px 1fr 80px;
+        }
+        .bars .name {
+          font-size: 0.82rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>
+        Tailles de modèles : <em>tiny</em> dans le navigateur vs frontier dans
+        le cloud
+      </h1>
+      <p>
+        Comparaison du nombre de paramètres entre les modèles utilisés dans
+        <a href="./transformers.html">transformers.html</a> /
+        <a href="./chrome-ai.html">chrome-ai.html</a>
+        et les LLM grand public hébergés dans le cloud. Échelle logarithmique :
+        sans elle, les petits modèles seraient invisibles.
+      </p>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>Comparaison des paramètres (échelle log)</h2>
+        <p class="sub">
+          Une barre <em>plus longue</em> ne signifie pas linéairement « plus
+          grand » : chaque graduation représente un ×10.
+        </p>
+
+        <div class="legend">
+          <span><i class="swatch tiny"></i> Tiny (in-browser, ce repo)</span>
+          <span
+            ><i class="swatch mid"></i> On-device / open-weights moyens</span
+          >
+          <span
+            ><i class="swatch frontier"></i> Frontier cloud (estimations
+            publiques)</span
+          >
+        </div>
+
+        <div id="bars" class="bars"></div>
+        <div class="axis">
+          <div></div>
+          <div id="ticks" class="ticks"></div>
+          <div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Visualisation par bulles (aire ∝ √paramètres)</h2>
+        <p class="sub">
+          L'aire des bulles est proportionnelle à la racine carrée du nombre de
+          paramètres pour rester lisible — sinon les tiny seraient des points
+          invisibles à côté de GPT-5.
+        </p>
+        <div class="bubbles-wrap">
+          <svg
+            id="bubbles"
+            class="bubbles"
+            viewBox="0 0 2500 360"
+            preserveAspectRatio="xMidYMid meet"
+          ></svg>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Ordres de grandeur</h2>
+        <p class="sub">
+          Quelques ratios pour situer ce qu'on fait tourner ici par rapport à
+          GPT-5 ou Claude Opus.
+        </p>
+        <div id="callout" class="callout"></div>
+      </section>
+
+      <section class="card">
+        <p class="note">
+          <strong>Note méthodologique.</strong> Les modèles propriétaires
+          (GPT-5, Claude, Gemini Pro, Gemini Nano) ne publient pas leur nombre
+          de paramètres. Les valeurs marquées <em>(est.)</em> sont des
+          estimations publiques agrégées (papers, leaks, benchmarks de coût
+          d'inférence) et peuvent être fausses d'un facteur 2 à 5. Les modèles
+          tiny et open-weights affichent leur taille réelle. Pour les
+          architectures MoE (DeepSeek V3, GPT-4/5 supposés), c'est le total des
+          paramètres qui est indiqué, pas les actifs par token.
+        </p>
+      </section>
+    </main>
+
+    <script>
+      // params en millions
+      const models = [
+        // Tiny - utilisés dans ce repo
+        {
+          name: "all-MiniLM-L6-v2",
+          note: "embeddings — ce repo",
+          params: 22,
+          group: "tiny",
+        },
+        {
+          name: "mobilebert-uncased-mnli",
+          note: "zero-shot — ce repo",
+          params: 25,
+          group: "tiny",
+        },
+        {
+          name: "distilbert-squad",
+          note: "QA — ce repo",
+          params: 65,
+          group: "tiny",
+        },
+        {
+          name: "distilbert-sst-2",
+          note: "sentiment — ce repo",
+          params: 67,
+          group: "tiny",
+        },
+        {
+          name: "distilbart-cnn-6-6",
+          note: "résumé — ce repo",
+          params: 120,
+          group: "tiny",
+        },
+        {
+          name: "xlm-roberta-base",
+          note: "détection langue — ce repo",
+          params: 278,
+          group: "tiny",
+        },
+        {
+          name: "SmolLM2-360M-Instruct",
+          note: "génération — ce repo",
+          params: 360,
+          group: "tiny",
+        },
+        {
+          name: "nllb-200-distilled-600M",
+          note: "traduction — ce repo",
+          params: 600,
+          group: "tiny",
+        },
+
+        // On-device / open-weights moyens
+        {
+          name: "Gemini Nano",
+          note: "Chrome built-in (est.)",
+          params: 3250,
+          group: "mid",
+        },
+        {
+          name: "Llama 3.1 8B",
+          note: "open-weights",
+          params: 8000,
+          group: "mid",
+        },
+        {
+          name: "Mistral Small 24B",
+          note: "open-weights",
+          params: 24000,
+          group: "mid",
+        },
+        {
+          name: "Llama 3.1 70B",
+          note: "open-weights",
+          params: 70000,
+          group: "mid",
+        },
+
+        // Frontier
+        {
+          name: "Claude Haiku 4.5",
+          note: "Anthropic (est.)",
+          params: 80000,
+          group: "frontier",
+        },
+        {
+          name: "GPT-3",
+          note: "référence historique",
+          params: 175000,
+          group: "frontier",
+        },
+        {
+          name: "Llama 3.1 405B",
+          note: "open-weights",
+          params: 405000,
+          group: "frontier",
+        },
+        {
+          name: "DeepSeek V3",
+          note: "MoE total",
+          params: 671000,
+          group: "frontier",
+        },
+        {
+          name: "Claude Sonnet 4.6",
+          note: "Anthropic (est.)",
+          params: 800000,
+          group: "frontier",
+        },
+        {
+          name: "Gemini 2.5 Pro",
+          note: "Google (est.)",
+          params: 1200000,
+          group: "frontier",
+        },
+        {
+          name: "GPT-4",
+          note: "OpenAI (est. MoE)",
+          params: 1760000,
+          group: "frontier",
+        },
+        {
+          name: "Claude Opus 4.7",
+          note: "Anthropic (est.)",
+          params: 2000000,
+          group: "frontier",
+        },
+        {
+          name: "GPT-5",
+          note: "OpenAI (est.)",
+          params: 3000000,
+          group: "frontier",
+        },
+      ];
+
+      // ---------- Bar chart ----------
+      const minLog = Math.log10(10); // 10M
+      const maxLog = Math.log10(5_000_000); // 5T
+      const span = maxLog - minLog;
+
+      const fmt = (m) => {
+        if (m >= 1_000_000)
+          return (m / 1_000_000).toFixed(m >= 10_000_000 ? 0 : 1) + "T";
+        if (m >= 1000)
+          return (
+            (m / 1000).toFixed(m >= 100_000 ? 0 : m >= 10_000 ? 0 : 1) + "B"
+          );
+        return m + "M";
+      };
+
+      const barsEl = document.getElementById("bars");
+      // Sort ascending so it reads tiny → frontier
+      const sorted = [...models].sort((a, b) => a.params - b.params);
+      for (const m of sorted) {
+        const pct = ((Math.log10(m.params) - minLog) / span) * 100;
+        const row = document.createElement("div");
+        row.className = "row";
+        row.innerHTML = `
+      <div class="name">${m.name}<small>${m.note}</small></div>
+      <div class="track"><div class="fill ${m.group}" style="width:${Math.max(pct, 2)}%"></div></div>
+      <div class="value"><strong>${fmt(m.params)}</strong></div>
+    `;
+        barsEl.appendChild(row);
+      }
+
+      // Ticks: 10M, 100M, 1B, 10B, 100B, 1T
+      const ticksEl = document.getElementById("ticks");
+      const tickValues = [10, 100, 1000, 10_000, 100_000, 1_000_000];
+      for (const t of tickValues) {
+        const pct = ((Math.log10(t) - minLog) / span) * 100;
+        const el = document.createElement("div");
+        el.className = "tick";
+        el.style.left = pct + "%";
+        el.textContent = fmt(t);
+        ticksEl.appendChild(el);
+      }
+
+      // ---------- Bubbles ----------
+      const svg = document.getElementById("bubbles");
+      const W = 2500,
+        H = 360;
+      const ns = "http://www.w3.org/2000/svg";
+
+      const groups = {
+        tiny: {
+          y: 110,
+          color: "var(--tiny)",
+          title: "Tiny (in-browser, ce repo)",
+        },
+        mid: {
+          y: 230,
+          color: "var(--mid)",
+          title: "On-device / open-weights moyens",
+        },
+        frontier: { y: 230, color: "var(--frontier)", title: "Frontier cloud" },
+      };
+
+      // Two rows: tiny on top, mid+frontier on bottom (since they share scale)
+      const tinyModels = models.filter((m) => m.group === "tiny");
+      const bigModels = models.filter((m) => m.group !== "tiny");
+
+      // Radius: sqrt scaling with cap so tiny stays visible
+      const minR = 8,
+        maxR = 70;
+      const minP = Math.min(...models.map((m) => m.params));
+      const maxP = Math.max(...models.map((m) => m.params));
+      const rScale = (p) => {
+        const t =
+          (Math.sqrt(p) - Math.sqrt(minP)) /
+          (Math.sqrt(maxP) - Math.sqrt(minP));
+        return minR + t * (maxR - minR);
+      };
+
+      function layout(list, yCenter) {
+        // place bubbles left → right, packed by their radius
+        const sortedList = [...list].sort((a, b) => a.params - b.params);
+        let x = 60;
+        const padding = 18;
+        const placed = [];
+        for (const m of sortedList) {
+          const r = rScale(m.params);
+          x += r;
+          placed.push({ ...m, x, y: yCenter, r });
+          x += r + padding;
+        }
+        // scale x positions to fit width
+        const totalW = x + 40;
+        const sx = (W - 40) / totalW;
+        for (const p of placed) {
+          p.x = 20 + p.x * sx;
+        }
+        return placed;
+      }
+
+      const tinyLaid = layout(tinyModels, 110);
+      const bigLaid = layout(bigModels, 250);
+
+      // group labels
+      const labelTiny = document.createElementNS(ns, "text");
+      labelTiny.setAttribute("x", 20);
+      labelTiny.setAttribute("y", 28);
+      labelTiny.setAttribute("class", "group-label");
+      labelTiny.textContent = "Tiny — exécutés dans ce repo (navigateur)";
+      svg.appendChild(labelTiny);
+
+      const labelBig = document.createElementNS(ns, "text");
+      labelBig.setAttribute("x", 20);
+      labelBig.setAttribute("y", 168);
+      labelBig.setAttribute("class", "group-label");
+      labelBig.textContent = "Cloud — open-weights moyens & modèles frontier";
+      svg.appendChild(labelBig);
+
+      // separator
+      const sep = document.createElementNS(ns, "line");
+      sep.setAttribute("x1", 20);
+      sep.setAttribute("x2", W - 20);
+      sep.setAttribute("y1", 152);
+      sep.setAttribute("y2", 152);
+      sep.setAttribute("stroke", "rgba(255,255,255,0.08)");
+      sep.setAttribute("stroke-dasharray", "4 4");
+      svg.appendChild(sep);
+
+      function drawBubble(p, color) {
+        const c = document.createElementNS(ns, "circle");
+        c.setAttribute("cx", p.x);
+        c.setAttribute("cy", p.y);
+        c.setAttribute("r", p.r);
+        c.setAttribute("fill", color);
+        c.setAttribute("fill-opacity", "0.18");
+        c.setAttribute("stroke", color);
+        c.setAttribute("stroke-width", "1.5");
+        svg.appendChild(c);
+
+        const t1 = document.createElementNS(ns, "text");
+        t1.setAttribute("x", p.x);
+        t1.setAttribute("y", p.y + p.r + 16);
+        t1.setAttribute("class", "bubble-label");
+        t1.textContent = p.name;
+        svg.appendChild(t1);
+
+        const t2 = document.createElementNS(ns, "text");
+        t2.setAttribute("x", p.x);
+        t2.setAttribute("y", p.y + p.r + 30);
+        t2.setAttribute("class", "bubble-sub");
+        t2.textContent = fmt(p.params);
+        svg.appendChild(t2);
+      }
+
+      for (const p of tinyLaid) drawBubble(p, "#34d399");
+      for (const p of bigLaid) {
+        const color = p.group === "frontier" ? "#f472b6" : "#60a5fa";
+        drawBubble(p, color);
+      }
+
+      // ---------- Callouts ----------
+      const calloutEl = document.getElementById("callout");
+      const find = (n) => models.find((m) => m.name.startsWith(n)).params;
+      const minilm = find("all-MiniLM");
+      const smol = find("SmolLM2");
+      const opus = find("Claude Opus");
+      const gpt5 = find("GPT-5");
+      const haiku = find("Claude Haiku");
+
+      const stats = [
+        {
+          num: Math.round(opus / smol).toLocaleString("fr-FR") + "×",
+          lbl: `Claude Opus 4.7 (~${fmt(opus)}) est environ ${Math.round(opus / smol).toLocaleString("fr-FR")}× plus gros que SmolLM2-360M utilisé pour la génération en local.`,
+        },
+        {
+          num: Math.round(gpt5 / minilm).toLocaleString("fr-FR") + "×",
+          lbl: `GPT-5 (~${fmt(gpt5)}) est environ ${Math.round(gpt5 / minilm).toLocaleString("fr-FR")}× plus gros qu'all-MiniLM-L6-v2 utilisé pour les embeddings.`,
+        },
+        {
+          num: Math.round(haiku / smol).toLocaleString("fr-FR") + "×",
+          lbl: `Même Claude Haiku — le plus petit de la gamme — pèse ~${Math.round(haiku / smol).toLocaleString("fr-FR")}× SmolLM2-360M.`,
+        },
+        {
+          num: "~1 Go",
+          lbl: "Tous les modèles tiny de ce repo réunis tiennent dans le cache navigateur. Un seul checkpoint Opus pèserait l'équivalent de plusieurs téraoctets en fp16.",
+        },
+      ];
+
+      for (const s of stats) {
+        const el = document.createElement("div");
+        el.className = "stat";
+        el.innerHTML = `<div class="num">${s.num}</div><div class="lbl">${s.lbl}</div>`;
+        calloutEl.appendChild(el);
+      }
+    </script>
+  </body>
+</html>
