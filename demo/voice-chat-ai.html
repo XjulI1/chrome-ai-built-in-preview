@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Voice Chat AI — Gemini Nano</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-1: #0b0d23;
+    --bg-2: #1a1d4a;
+    --accent: #7c5cff;
+    --accent-2: #00e5ff;
+    --text: #e8eaff;
+    --muted: #8d92c7;
+    --user: #2a2f6b;
+    --ai: #3a1d6b;
+    --ok: #2ecc71;
+    --warn: #f39c12;
+    --err: #e74c3c;
+  }
+
+  html, body {
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  body {
+    background: radial-gradient(ellipse at top, var(--bg-2) 0%, var(--bg-1) 70%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Animated background particles */
+  .bg-particles {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .bg-particles span {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: rgba(124, 92, 255, 0.4);
+    border-radius: 50%;
+    animation: float 20s linear infinite;
+  }
+  @keyframes float {
+    0% { transform: translateY(100vh) scale(0); opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { transform: translateY(-10vh) scale(1); opacity: 0; }
+  }
+
+  header {
+    text-align: center;
+    padding: 18px 20px 6px;
+    z-index: 2;
+  }
+  header h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    letter-spacing: 0.5px;
+  }
+  header p {
+    color: var(--muted);
+    font-size: 0.82rem;
+    margin-top: 2px;
+  }
+
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 20px;
+    padding: 10px 24px 16px;
+    z-index: 2;
+    min-height: 0;
+  }
+
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  }
+
+  .avatar-panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 22px;
+    backdrop-filter: blur(8px);
+    padding: 16px;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .avatar-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 380px;
+    aspect-ratio: 1;
+  }
+
+  .halo {
+    position: absolute;
+    inset: -10%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(124,92,255,0.35), transparent 60%);
+    filter: blur(20px);
+    transition: all 0.5s ease;
+    animation: pulse-idle 4s ease-in-out infinite;
+  }
+  .listening .halo {
+    background: radial-gradient(circle, rgba(46, 204, 113, 0.5), transparent 60%);
+    animation: pulse-listen 1.5s ease-in-out infinite;
+  }
+  .speaking .halo {
+    background: radial-gradient(circle, rgba(0, 229, 255, 0.55), transparent 60%);
+    animation: pulse-speak 0.6s ease-in-out infinite;
+  }
+  .thinking .halo {
+    background: radial-gradient(circle, rgba(243, 156, 18, 0.5), transparent 60%);
+    animation: pulse-think 2s ease-in-out infinite;
+  }
+  @keyframes pulse-idle {
+    0%, 100% { transform: scale(1); opacity: 0.6; }
+    50% { transform: scale(1.05); opacity: 0.9; }
+  }
+  @keyframes pulse-listen {
+    0%, 100% { transform: scale(1); opacity: 0.6; }
+    50% { transform: scale(1.15); opacity: 1; }
+  }
+  @keyframes pulse-speak {
+    0%, 100% { transform: scale(1.05); opacity: 0.8; }
+    50% { transform: scale(1.18); opacity: 1; }
+  }
+  @keyframes pulse-think {
+    0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.7; }
+    50% { transform: scale(1.1) rotate(180deg); opacity: 1; }
+  }
+
+  .avatar-svg {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    animation: breathe 4s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-4px) scale(1.01); }
+  }
+
+  /* Mouth animation */
+  #mouth {
+    transition: all 0.1s ease-out;
+    transform-origin: 200px 270px;
+  }
+
+  /* Eye blink */
+  .eye-lid {
+    transform-origin: center;
+    transform: scaleY(0);
+    transition: transform 0.08s ease;
+  }
+  .blinking .eye-lid {
+    transform: scaleY(1);
+  }
+
+  /* Status badge */
+  .status {
+    margin-top: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    font-size: 0.85rem;
+    color: var(--muted);
+    transition: all 0.3s ease;
+  }
+  .status .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    box-shadow: 0 0 8px currentColor;
+  }
+  .listening .status { color: var(--ok); }
+  .listening .status .dot { background: var(--ok); animation: blink 1s infinite; }
+  .thinking .status { color: var(--warn); }
+  .thinking .status .dot { background: var(--warn); animation: blink 0.6s infinite; }
+  .speaking .status { color: var(--accent-2); }
+  .speaking .status .dot { background: var(--accent-2); animation: blink 0.4s infinite; }
+  @keyframes blink {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+
+  /* Right panel: chat + controls */
+  .chat-panel {
+    display: flex;
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 22px;
+    backdrop-filter: blur(8px);
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(124,92,255,0.5) transparent;
+  }
+  .messages::-webkit-scrollbar { width: 8px; }
+  .messages::-webkit-scrollbar-thumb { background: rgba(124,92,255,0.5); border-radius: 4px; }
+
+  .msg {
+    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: 16px;
+    line-height: 1.5;
+    font-size: 0.92rem;
+    animation: slide-in 0.3s ease-out;
+    word-wrap: break-word;
+  }
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .msg.user {
+    background: linear-gradient(135deg, var(--user), #383d8a);
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+  }
+  .msg.ai {
+    background: linear-gradient(135deg, var(--ai), #5a2c9e);
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+  }
+  .msg.system {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--muted);
+    align-self: center;
+    font-size: 0.78rem;
+    border: 1px dashed rgba(255,255,255,0.15);
+    text-align: center;
+    max-width: 95%;
+  }
+  .msg .meta {
+    font-size: 0.7rem;
+    opacity: 0.6;
+    margin-bottom: 3px;
+  }
+
+  .controls {
+    padding: 14px 18px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .live-text {
+    min-height: 22px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-style: italic;
+    padding: 0 4px;
+  }
+  .live-text.active { color: var(--ok); }
+
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .mic-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 18px;
+    border: none;
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: white;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 14px rgba(124,92,255,0.4);
+  }
+  .mic-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(124,92,255,0.6); }
+  .mic-btn:active { transform: translateY(0); }
+  .mic-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .mic-btn.active {
+    background: linear-gradient(135deg, var(--err), #ff6b9d);
+    animation: mic-pulse 1.2s infinite;
+  }
+  @keyframes mic-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.6); }
+    50% { box-shadow: 0 0 0 12px rgba(231, 76, 60, 0); }
+  }
+
+  .icon-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+  }
+  .icon-btn:hover { background: rgba(255,255,255,0.1); }
+
+  .footer-info {
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--muted);
+    padding: 8px;
+    z-index: 2;
+  }
+
+  .badge-pill {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: rgba(124,92,255,0.18);
+    color: var(--accent-2);
+    font-size: 0.68rem;
+    margin: 0 3px;
+    font-weight: 600;
+  }
+
+  .compat-warn {
+    display: none;
+    margin: 8px 18px 0;
+    padding: 10px 14px;
+    background: rgba(243,156,18,0.12);
+    border: 1px solid rgba(243,156,18,0.3);
+    border-radius: 10px;
+    font-size: 0.82rem;
+    color: var(--warn);
+  }
+  .compat-warn.show { display: block; }
+
+  /* === Modale de configuration === */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(5, 7, 25, 0.7);
+    backdrop-filter: blur(6px);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    animation: fade-in 0.2s ease;
+  }
+  .modal-backdrop[hidden] { display: none; }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+  .modal {
+    background: linear-gradient(180deg, #1c1f4d, #14163a);
+    border: 1px solid rgba(124, 92, 255, 0.3);
+    border-radius: 18px;
+    padding: 24px;
+    max-width: 520px;
+    width: 100%;
+    color: var(--text);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    animation: slide-up 0.25s ease;
+  }
+  @keyframes slide-up { from { transform: translateY(15px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  .modal h2 {
+    font-size: 1.05rem;
+    margin-bottom: 10px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .modal-help, .modal-warn {
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+  .modal-help a {
+    color: var(--accent-2);
+    text-decoration: none;
+  }
+  .modal-help a:hover { text-decoration: underline; }
+  .modal-warn { color: var(--warn); }
+
+  .modal label {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin: 10px 0 4px;
+  }
+  .modal input {
+    width: 100%;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 0.88rem;
+    font-family: ui-monospace, SF Mono, Menlo, monospace;
+  }
+  .modal input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(124,92,255,0.15);
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 18px;
+  }
+  .btn-primary, .btn-secondary {
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: none;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: white;
+  }
+  .btn-primary:hover { transform: translateY(-1px); }
+  .btn-secondary {
+    background: rgba(255,255,255,0.06);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+  .btn-secondary:hover { background: rgba(255,255,255,0.12); }
+
+  .modal-test-result {
+    margin-top: 12px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    min-height: 20px;
+  }
+  .modal-test-result.ok { color: var(--ok); }
+  .modal-test-result.err { color: var(--err); }
+</style>
+</head>
+<body>
+  <div class="bg-particles" id="particles"></div>
+
+  <header>
+    <h1>🎙️ Voice Chat AI</h1>
+    <p>
+      <span class="badge-pill">SpeechRecognition</span>→
+      <span class="badge-pill">Gemini Nano</span>→
+      <span class="badge-pill">SpeechSynthesis</span>
+    </p>
+  </header>
+
+  <div class="compat-warn" id="compatWarn"></div>
+
+  <main>
+    <!-- AVATAR -->
+    <section class="avatar-panel" id="avatarPanel">
+      <div class="avatar-wrapper" id="avatarWrapper">
+        <div class="halo"></div>
+        <svg class="avatar-svg" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="skinGrad" cx="50%" cy="40%" r="60%">
+              <stop offset="0%" stop-color="#ffd9b8" />
+              <stop offset="60%" stop-color="#f5b896" />
+              <stop offset="100%" stop-color="#c98c6b" />
+            </radialGradient>
+            <radialGradient id="hairGrad" cx="50%" cy="20%" r="80%">
+              <stop offset="0%" stop-color="#3a2a1d" />
+              <stop offset="100%" stop-color="#1a0f08" />
+            </radialGradient>
+            <radialGradient id="eyeGrad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#5b8cff" />
+              <stop offset="80%" stop-color="#1a3a8a" />
+              <stop offset="100%" stop-color="#0a1a4a" />
+            </radialGradient>
+            <linearGradient id="lipGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#d96a6a" />
+              <stop offset="100%" stop-color="#a04545" />
+            </linearGradient>
+            <linearGradient id="bgGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="rgba(124,92,255,0.3)" />
+              <stop offset="100%" stop-color="rgba(0,229,255,0.05)" />
+            </linearGradient>
+            <filter id="softShadow">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+              <feOffset dx="0" dy="3" result="offsetblur"/>
+              <feFlood flood-color="#000" flood-opacity="0.3"/>
+              <feComposite in2="offsetblur" operator="in"/>
+              <feMerge>
+                <feMergeNode/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>
+
+          <!-- Background circle -->
+          <circle cx="200" cy="200" r="180" fill="url(#bgGlow)" opacity="0.5"/>
+
+          <!-- Neck -->
+          <path d="M 165 320 Q 165 360 175 380 L 225 380 Q 235 360 235 320 Z" fill="url(#skinGrad)" />
+
+          <!-- Hair back -->
+          <path d="M 110 180 Q 100 100 200 80 Q 300 100 290 180 L 290 240 Q 280 220 270 230 L 130 230 Q 120 220 110 240 Z" fill="url(#hairGrad)" />
+
+          <!-- Face -->
+          <ellipse cx="200" cy="210" rx="90" ry="110" fill="url(#skinGrad)" filter="url(#softShadow)" />
+
+          <!-- Cheeks (subtle) -->
+          <ellipse cx="145" cy="240" rx="20" ry="14" fill="#ff9b9b" opacity="0.25" />
+          <ellipse cx="255" cy="240" rx="20" ry="14" fill="#ff9b9b" opacity="0.25" />
+
+          <!-- Eyebrows -->
+          <path id="brow-left" d="M 145 168 Q 165 158 185 168" stroke="#2a1a0d" stroke-width="5" stroke-linecap="round" fill="none" />
+          <path id="brow-right" d="M 215 168 Q 235 158 255 168" stroke="#2a1a0d" stroke-width="5" stroke-linecap="round" fill="none" />
+
+          <!-- Eyes -->
+          <g id="eye-left">
+            <ellipse cx="165" cy="200" rx="18" ry="13" fill="white" />
+            <circle id="iris-left" cx="165" cy="200" r="9" fill="url(#eyeGrad)" />
+            <circle cx="165" cy="200" r="4" fill="#0a0a1a" />
+            <circle cx="167" cy="197" r="2" fill="white" />
+            <ellipse class="eye-lid" cx="165" cy="200" rx="20" ry="14" fill="url(#skinGrad)" />
+          </g>
+          <g id="eye-right">
+            <ellipse cx="235" cy="200" rx="18" ry="13" fill="white" />
+            <circle id="iris-right" cx="235" cy="200" r="9" fill="url(#eyeGrad)" />
+            <circle cx="235" cy="200" r="4" fill="#0a0a1a" />
+            <circle cx="237" cy="197" r="2" fill="white" />
+            <ellipse class="eye-lid" cx="235" cy="200" rx="20" ry="14" fill="url(#skinGrad)" />
+          </g>
+
+          <!-- Nose -->
+          <path d="M 200 215 Q 195 240 192 255 Q 200 262 208 255 Q 205 240 200 215" fill="#d49b7a" opacity="0.5" />
+          <ellipse cx="195" cy="258" rx="2" ry="1.5" fill="#9a6648" opacity="0.5" />
+          <ellipse cx="205" cy="258" rx="2" ry="1.5" fill="#9a6648" opacity="0.5" />
+
+          <!-- Mouth -->
+          <g id="mouth">
+            <path id="mouthShape" d="M 175 285 Q 200 295 225 285 Q 200 290 175 285 Z" fill="url(#lipGrad)" />
+          </g>
+
+          <!-- Front hair -->
+          <path d="M 115 175 Q 125 110 200 95 Q 275 110 285 175 Q 270 130 240 130 Q 220 145 200 140 Q 180 145 160 130 Q 130 130 115 175 Z" fill="url(#hairGrad)" />
+
+          <!-- Ears -->
+          <ellipse cx="112" cy="220" rx="10" ry="20" fill="url(#skinGrad)" />
+          <ellipse cx="288" cy="220" rx="10" ry="20" fill="url(#skinGrad)" />
+        </svg>
+      </div>
+
+      <div class="status" id="statusBadge">
+        <span class="dot"></span>
+        <span id="statusText">En attente…</span>
+      </div>
+    </section>
+
+    <!-- CHAT -->
+    <section class="chat-panel">
+      <div class="messages" id="messages">
+        <div class="msg system">
+          Bienvenue ! Cliquez sur le micro et parlez. La conversation utilise les API natives du navigateur (Chrome Canary requis pour Gemini Nano).
+        </div>
+        <div class="msg system">
+          ℹ️ Recherche web activée via <b>Brave Search API</b> (avec Wikipedia en fallback). Cliquez sur l'icône ⚙️ pour configurer votre clé API Brave (2 000 req/mois gratuites).
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="live-text" id="liveText">Cliquez sur le micro pour commencer…</div>
+        <div class="btn-row">
+          <button class="mic-btn" id="micBtn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+            <span id="micBtnLabel">Démarrer la conversation</span>
+          </button>
+          <button class="icon-btn" id="stopBtn" title="Arrêter la voix de l'IA">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="6" y="6" width="12" height="12" rx="2"/>
+            </svg>
+          </button>
+          <button class="icon-btn" id="clearBtn" title="Vider la conversation">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/>
+            </svg>
+          </button>
+          <button class="icon-btn" id="settingsBtn" title="Configurer Brave Search API">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modale de configuration Brave Search API -->
+  <div class="modal-backdrop" id="settingsModal" hidden>
+    <div class="modal">
+      <h2>Configurer Brave Search API</h2>
+      <p class="modal-help">
+        Crée un compte sur <a href="https://api.search.brave.com/app/dashboard" target="_blank">api.search.brave.com</a>,
+        souscris au plan <b>Free</b> (2 000 requêtes/mois, gratuit en récurrent), puis copie ta clé API depuis le dashboard.
+      </p>
+      <label>API Key</label>
+      <input type="password" id="keyInput" placeholder="BSA…" autocomplete="off" />
+      <p class="modal-warn">⚠️ Stockée localement (localStorage). Brave ne supportant pas CORS, les requêtes passent par un proxy local : lance <code>node cors-proxy.js</code> dans le même dossier que ce fichier.</p>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="testGoogleBtn">Tester</button>
+        <button class="btn-secondary" id="cancelSettingsBtn">Annuler</button>
+        <button class="btn-primary" id="saveSettingsBtn">Enregistrer</button>
+      </div>
+      <div class="modal-test-result" id="testResult"></div>
+    </div>
+  </div>
+
+  <div class="footer-info">
+    Activez <code>chrome://flags/#prompt-api-for-gemini-nano</code> et <code>#optimization-guide-on-device-model</code> dans Chrome Canary
+  </div>
+
+<script>
+/* =============================================================
+   Background particles
+============================================================= */
+(function makeParticles() {
+  const c = document.getElementById('particles');
+  for (let i = 0; i < 30; i++) {
+    const s = document.createElement('span');
+    s.style.left = Math.random() * 100 + 'vw';
+    s.style.animationDelay = Math.random() * 20 + 's';
+    s.style.animationDuration = (15 + Math.random() * 15) + 's';
+    s.style.opacity = 0.3 + Math.random() * 0.5;
+    c.appendChild(s);
+  }
+})();
+
+/* =============================================================
+   DOM refs
+============================================================= */
+const avatarPanel = document.getElementById('avatarPanel');
+const avatarWrapper = document.getElementById('avatarWrapper');
+const statusText = document.getElementById('statusText');
+const messagesEl = document.getElementById('messages');
+const micBtn = document.getElementById('micBtn');
+const micBtnLabel = document.getElementById('micBtnLabel');
+const stopBtn = document.getElementById('stopBtn');
+const clearBtn = document.getElementById('clearBtn');
+const liveText = document.getElementById('liveText');
+const compatWarn = document.getElementById('compatWarn');
+const mouthEl = document.getElementById('mouthShape');
+const irisLeft = document.getElementById('iris-left');
+const irisRight = document.getElementById('iris-right');
+
+/* =============================================================
+   State machine
+============================================================= */
+const State = { IDLE: 'idle', LISTENING: 'listening', THINKING: 'thinking', SPEAKING: 'speaking' };
+let state = State.IDLE;
+
+function setState(newState, label) {
+  state = newState;
+  avatarPanel.classList.remove('listening', 'thinking', 'speaking');
+  if (newState !== State.IDLE) avatarPanel.classList.add(newState);
+  statusText.textContent = label || newState;
+}
+
+/* =============================================================
+   Avatar animation: blink + look around
+============================================================= */
+function blink() {
+  avatarWrapper.classList.add('blinking');
+  setTimeout(() => avatarWrapper.classList.remove('blinking'), 140);
+}
+setInterval(blink, 3500 + Math.random() * 1500);
+
+// Subtle eye drift when idle
+let eyeDriftRAF;
+function eyeDrift() {
+  const t = Date.now() / 1000;
+  const dx = Math.sin(t * 0.7) * 2.2;
+  const dy = Math.cos(t * 0.5) * 1.5;
+  irisLeft.setAttribute('cx', 165 + dx);
+  irisLeft.setAttribute('cy', 200 + dy);
+  irisRight.setAttribute('cx', 235 + dx);
+  irisRight.setAttribute('cy', 200 + dy);
+  eyeDriftRAF = requestAnimationFrame(eyeDrift);
+}
+eyeDrift();
+
+/* =============================================================
+   Mouth animation (procedural lip-sync via amplitude)
+============================================================= */
+let mouthRAF = null;
+function setMouth(openness) {
+  // openness in [0..1] — opens vertically
+  const o = Math.max(0, Math.min(1, openness));
+  const top = 285 - o * 4;
+  const bot = 285 + o * 14;
+  const mid = 290 + o * 5;
+  mouthEl.setAttribute(
+    'd',
+    `M 175 ${top} Q 200 ${bot} 225 ${top} Q 200 ${mid} 175 ${top} Z`
+  );
+}
+function animateMouthSpeaking() {
+  cancelAnimationFrame(mouthRAF);
+  const start = Date.now();
+  function tick() {
+    if (state !== State.SPEAKING) {
+      setMouth(0);
+      return;
+    }
+    const t = (Date.now() - start) / 1000;
+    // Combine multiple sines for organic mouth movement
+    const v = 0.5 + 0.4 * Math.sin(t * 12) + 0.2 * Math.sin(t * 7) + 0.1 * Math.sin(t * 23);
+    setMouth(Math.abs(v) * 0.7);
+    mouthRAF = requestAnimationFrame(tick);
+  }
+  tick();
+}
+
+/* =============================================================
+   Chat messaging
+============================================================= */
+function addMessage(role, text) {
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  if (role !== 'system') {
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = role === 'user' ? 'Vous' : '🤖 IA';
+    div.appendChild(meta);
+  }
+  const body = document.createElement('div');
+  body.textContent = text;
+  div.appendChild(body);
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+/* =============================================================
+   Speech recognition (voix → texte)
+============================================================= */
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let listening = false;
+
+if (SpeechRecognition) {
+  recognition = new SpeechRecognition();
+  recognition.lang = 'fr-FR';
+  recognition.interimResults = true;
+  recognition.continuous = false;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    listening = true;
+    setState(State.LISTENING, 'À l\'écoute…');
+    liveText.textContent = '🎤 Je vous écoute…';
+    liveText.classList.add('active');
+    micBtn.classList.add('active');
+    micBtnLabel.textContent = 'En train d\'écouter…';
+  };
+
+  let finalTranscript = '';
+  recognition.onresult = (e) => {
+    let interim = '';
+    finalTranscript = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalTranscript += t;
+      else interim += t;
+    }
+    liveText.textContent = (finalTranscript || interim) || '🎤 Je vous écoute…';
+  };
+
+  recognition.onerror = (e) => {
+    console.error('Recognition error:', e.error);
+    liveText.textContent = `⚠️ Erreur : ${e.error}`;
+    liveText.classList.remove('active');
+    listening = false;
+    micBtn.classList.remove('active');
+    micBtnLabel.textContent = 'Démarrer la conversation';
+    setState(State.IDLE, 'En attente…');
+  };
+
+  recognition.onend = async () => {
+    listening = false;
+    micBtn.classList.remove('active');
+    micBtnLabel.textContent = 'Démarrer la conversation';
+    liveText.classList.remove('active');
+
+    const text = finalTranscript.trim();
+    if (text) {
+      addMessage('user', text);
+      liveText.textContent = '';
+      await askAI(text);
+    } else {
+      liveText.textContent = 'Aucune voix détectée. Réessayez.';
+      setState(State.IDLE, 'En attente…');
+    }
+  };
+} else {
+  showCompatWarn("⚠️ SpeechRecognition n'est pas supportée par ce navigateur. Utilisez Chrome (Canary recommandé).");
+  micBtn.disabled = true;
+}
+
+/* =============================================================
+   Configuration Brave Search API
+   (clé persistée dans localStorage)
+============================================================= */
+const DEBUG = true; // affiche les étapes de recherche dans le chat
+let braveKey = localStorage.getItem('brave_api_key') || '';
+
+function saveBraveKey(key) {
+  braveKey = (key || '').trim();
+  localStorage.setItem('brave_api_key', braveKey);
+}
+
+// Proxy CORS local — Brave Search ne supporte pas CORS depuis le navigateur.
+// Lance le proxy local fourni à côté :  node cors-proxy.js
+// Il écoute sur http://localhost:8787 et forwarde le header X-Subscription-Token.
+const CORS_PROXY = 'http://localhost:8787/?url=';
+
+async function braveSearch(query) {
+  if (!braveKey) return { ok: false, error: 'no-creds' };
+  const target = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&country=FR&search_lang=fr&count=5`;
+  const url = CORS_PROXY + encodeURIComponent(target);
+  console.log('[BRAVE] → (via proxy)', target);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'Accept': 'application/json',
+        'X-Subscription-Token': braveKey
+      }
+    });
+    const data = await res.json();
+    console.log('[BRAVE] ←', data);
+    if (!res.ok) {
+      const msg = data?.message || data?.error?.message || `HTTP ${res.status}`;
+      return { ok: false, error: msg };
+    }
+    const items = (data.web && data.web.results) || [];
+    if (!items.length) return { ok: true, text: '', count: 0 };
+
+    // Format minimal pour le LLM : pas d'URL, pas de markdown, juste titre + description
+    const stripHtml = (s) => (s || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    const formatted = items.slice(0, 5).map((it, i) =>
+      `Résultat ${i + 1} — ${stripHtml(it.title)}. ${stripHtml(it.description)}`
+    ).join('\n');
+    return { ok: true, text: formatted, count: items.length, raw: data };
+  } catch (err) {
+    console.error('[BRAVE] error', err);
+    return { ok: false, error: err.message };
+  }
+}
+
+/* =============================================================
+   Wikipedia (FR) — fallback gratuit quand Google n'est pas configuré
+   API CORS-friendly, idéale pour les sujets factuels encyclopédiques
+============================================================= */
+async function wikiSearch(query) {
+  const searchUrl = `https://fr.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=1&namespace=0&format=json&origin=*`;
+  console.log('[WIKI] →', searchUrl);
+  try {
+    const res = await fetch(searchUrl);
+    const data = await res.json();
+    console.log('[WIKI] search ←', data);
+    const title = data?.[1]?.[0];
+    if (!title) return { ok: true, text: '' };
+
+    const summaryUrl = `https://fr.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+    const sres = await fetch(summaryUrl);
+    const sdata = await sres.json();
+    console.log('[WIKI] summary ←', sdata);
+    const text = sdata.extract || '';
+    return { ok: true, text, title, raw: sdata };
+  } catch (err) {
+    console.error('[WIKI] error', err);
+    return { ok: false, error: err.message };
+  }
+}
+
+/* =============================================================
+   Heuristique : décide si la requête a besoin d'une recherche
+   Renvoie soit null (pas de recherche), soit { query, forced }
+   où query est la requête nettoyée à passer au moteur de recherche.
+============================================================= */
+function shouldSearch(rawQuery) {
+  const q = rawQuery.toLowerCase().trim();
+  if (q.length < 4) return null;
+
+  // 1) DÉCLENCHEURS EXPLICITES — l'utilisateur demande clairement une recherche.
+  //    On force la recherche ET on extrait la requête utile (sans le verbe).
+  const explicitTriggers = [
+    // « cherche / recherche / trouve / regarde / consulte / va voir / google moi … sur internet … »
+    /^(?:peux[- ]tu\s+|pourrais[- ]tu\s+|peux[- ]tu\s+me\s+|stp\s+|s'il[- ]te[- ]pla[iî]t[,\s]+)?(?:cherche|recherche|trouve|regarde|consulte|google)(?:[- ]moi)?\s+(?:sur\s+(?:internet|le\s+web|google|le\s+net|la\s+toile)\s+)?(.+)/i,
+    /^(?:peux[- ]tu\s+|pourrais[- ]tu\s+)?va\s+(?:voir|chercher)(?:\s+sur\s+(?:internet|le\s+web|google))?\s+(.+)/i,
+    /^(?:peux[- ]tu\s+|pourrais[- ]tu\s+|fais\s+|fait\s+)?(?:une\s+)?recherche\s+(?:web\s+|internet\s+)?(?:sur\s+|de\s+|pour\s+)?(.+)/i,
+    /^(?:donne|dis)[- ]moi\s+(?:ce\s+que\s+(?:tu\s+)?trouves?\s+sur\s+|des\s+infos?\s+sur\s+|les?\s+infos?\s+sur\s+)(.+)/i,
+    /^(?:cherche|recherche|trouve|google)\s+(.+)/i,
+  ];
+  for (const re of explicitTriggers) {
+    const m = rawQuery.match(re);
+    if (m && m[1] && m[1].trim().length > 1) {
+      return { query: m[1].trim().replace(/[?!.]+$/, ''), forced: true };
+    }
+  }
+
+  // 2) Salutations / petites discussions → pas de recherche
+  const chitchat = /^(bonjour|salut|coucou|hello|hi|merci|ok|oui|non|d'accord|au revoir|à bientôt|ça va|comment vas-tu|comment ça va|tu vas bien)/;
+  if (chitchat.test(q) && q.length < 35) return null;
+
+  // 3) Patterns clairs de question factuelle
+  const factual = [
+    /\b(qui (est|sont|était|étaient|a|ont)|c'est qui|qui c'est)\b/,
+    /\b(qu'est[- ]ce que|c'est quoi|qu'est-ce qu')\b/,
+    /\b(où (est|se trouve|sont))\b/,
+    /\b(quand (est|a|était|aura))\b/,
+    /\b(pourquoi|comment fonctionne|comment marche)\b/,
+    /\b(combien (de|d'|coûte|mesure|pèse))\b/,
+    /\b(quelle? est (la|le|les|l'))\b/,
+    /\b(définition|signifie|veut dire)\b/,
+    /\b(capitale|président|premier ministre|date de|année de|naissance|mort)\b/,
+    /\b(parle[- ]moi de|raconte[- ]moi|explique[- ]moi)\b/,
+    /\b(histoire de|biographie de)\b/,
+  ];
+  if (factual.some(p => p.test(q))) return { query: rawQuery.trim(), forced: false };
+
+  // 4) Phrase qui se termine par un point d'interrogation et fait > 4 mots
+  if (q.endsWith('?') && q.split(/\s+/).length > 4) {
+    return { query: rawQuery.trim(), forced: false };
+  }
+
+  return null;
+}
+
+/* =============================================================
+   Pipeline de recherche
+   Brave Search (si clé) → Wikipedia (fallback gratuit)
+============================================================= */
+async function runSearch(query) {
+  if (DEBUG) addMessage('system', `🔎 Recherche : « ${query} »`);
+
+  // 1) Brave Search (si configuré)
+  if (braveKey) {
+    const b = await braveSearch(query);
+    if (b.ok && b.text && b.text.length > 30) {
+      if (DEBUG) addMessage('system', `✓ Brave : ${b.count} résultats.`);
+      return b.text;
+    }
+    if (DEBUG) {
+      if (!b.ok) addMessage('system', `⚠️ Brave a échoué : ${b.error}. Bascule sur Wikipedia.`);
+      else addMessage('system', `⚠️ Brave : aucun résultat. Bascule sur Wikipedia.`);
+    }
+  } else if (DEBUG) {
+    addMessage('system', `ℹ️ Brave non configuré. Bascule sur Wikipedia (cliquez sur ⚙️ pour configurer Brave).`);
+  }
+
+  // 2) Wikipedia FR (fallback)
+  const wiki = await wikiSearch(query);
+  if (wiki.ok && wiki.text && wiki.text.length > 30) {
+    if (DEBUG) addMessage('system', `✓ Wikipedia (${wiki.title}) : ${wiki.text.length} caractères.`);
+    return `D'après Wikipedia (article « ${wiki.title} ») : ${wiki.text}`;
+  }
+  if (DEBUG) addMessage('system', `⚠️ Aucun résultat exploitable.`);
+  return null;
+}
+
+/* =============================================================
+   LanguageModel (Gemini Nano) — texte → réponse
+============================================================= */
+let aiSession = null;
+let aiAvailable = false;
+
+async function initAI() {
+  // Newer API: window.LanguageModel ; older: window.ai.languageModel
+  const LM = window.LanguageModel || window.ai?.languageModel;
+  if (!LM) {
+    showCompatWarn(
+      "ℹ️ L'API LanguageModel (Gemini Nano) n'est pas détectée. " +
+      "Utilisez Chrome Canary et activez les flags : prompt-api-for-gemini-nano + optimization-guide-on-device-model. " +
+      "Mode dégradé activé : les réponses utiliseront un fallback simple."
+    );
+    return;
+  }
+
+  try {
+    let availability;
+    if (LM.availability) {
+      availability = await LM.availability();
+    } else if (LM.capabilities) {
+      const cap = await LM.capabilities();
+      availability = cap.available;
+    }
+
+    if (availability === 'unavailable' || availability === 'no') {
+      showCompatWarn("⚠️ Gemini Nano indisponible sur cet appareil.");
+      return;
+    }
+
+    aiSession = await LM.create({
+      initialPrompts: [{
+        role: 'system',
+        content:
+          "Tu es un assistant vocal amical et concis qui parle français. " +
+          "Tu réponds à la voix, donc tes réponses doivent être courtes (1 à 3 phrases), " +
+          "naturelles, sans markdown ni listes à puces. Utilise un ton chaleureux.\n\n" +
+          "RÈGLE STRICTE — sortie vocale :\n" +
+          "- N'utilise JAMAIS d'émojis, de smileys, de symboles ou d'icônes.\n" +
+          "- N'utilise pas non plus d'astérisques, de tirets de liste, ni d'autres caractères de mise en forme.\n" +
+          "- Ta réponse sera lue à voix haute par un synthétiseur vocal : tout caractère non textuel sera prononcé maladroitement.\n" +
+          "- Écris uniquement du texte naturel, comme dans une conversation parlée.\n\n" +
+          "RECHERCHE EXTERNE :\n" +
+          "- Quand l'utilisateur pose une question factuelle, l'application peut t'envoyer des résultats web dans le prompt (préfixés par « Résultats de recherche web : »).\n" +
+          "- Si tu reçois ces résultats, base ta réponse dessus, reformule-les naturellement à l'oral.\n" +
+          "- Si les résultats ne contiennent pas l'info demandée, dis-le simplement.\n" +
+          "- Sans résultats, réponds depuis tes connaissances générales en restant prudent et en signalant si l'info peut être obsolète."
+      }]
+    });
+    aiAvailable = true;
+    addMessage('system', '✅ Gemini Nano initialisé. Parlez quand vous êtes prêt.');
+  } catch (err) {
+    console.error('AI init error:', err);
+    showCompatWarn(`⚠️ Impossible d'initialiser Gemini Nano : ${err.message}`);
+  }
+}
+
+async function askAI(prompt) {
+  setState(State.THINKING, 'Réflexion…');
+  liveText.textContent = '💭 L\'IA réfléchit…';
+
+  let response;
+  let augmentedPrompt = prompt;
+
+  try {
+    // Étape 1 : heuristique — a-t-on besoin d'une recherche ?
+    const searchInfo = shouldSearch(prompt);
+
+    // Étape 2 : si oui, on lance la recherche (Brave → Wikipedia)
+    if (searchInfo) {
+      const queryToSearch = searchInfo.query;
+      if (DEBUG && searchInfo.forced) {
+        addMessage('system', `🎯 Recherche explicite demandée par l'utilisateur.`);
+      }
+      setState(State.THINKING, '🔎 Recherche…');
+      liveText.textContent = `🔎 Recherche en cours…`;
+      const results = await runSearch(queryToSearch);
+      if (results) {
+        augmentedPrompt =
+          `Question de l'utilisateur : « ${prompt} »\n\n` +
+          `Voici des informations web brutes (NE PAS LES RECOPIER) :\n${results}\n\n` +
+          `INSTRUCTIONS STRICTES pour ta réponse :\n` +
+          `- Tu réponds à voix haute, donc en français parlé naturel.\n` +
+          `- SYNTHÉTISE l'information en 1 à 3 phrases courtes, pas plus.\n` +
+          `- Ne recopie JAMAIS le texte brut des résultats, ne mentionne JAMAIS « résultat 1 », « résultat 2 », etc.\n` +
+          `- Pas d'URL, pas de liens, pas de noms de sites web (ne dis pas TheFork, TripAdvisor, Wikipedia, etc.).\n` +
+          `- Pas de crochets [ ], pas de parenthèses techniques, pas de markdown, pas de tirets de liste.\n` +
+          `- Si les résultats sont insuffisants, dis-le simplement en une phrase.\n` +
+          `- Commence directement par la réponse, sans préambule du type « D'après les résultats… ».`;
+      } else {
+        augmentedPrompt =
+          `Question de l'utilisateur : ${prompt}\n\n` +
+          `(Recherche tentée sans résultat exploitable. Réponds depuis tes connaissances ` +
+          `en signalant honnêtement si tu n'es pas sûr ou si l'info peut être obsolète.)`;
+      }
+      setState(State.THINKING, 'Réflexion…');
+    }
+
+    // Étape 3 : génération finale
+    if (aiAvailable && aiSession) {
+      response = await aiSession.prompt(augmentedPrompt);
+    } else {
+      response = fallbackResponse(prompt);
+    }
+  } catch (err) {
+    console.error('AI prompt error:', err);
+    response = `Désolé, je n'ai pas pu traiter votre demande : ${err.message}`;
+  }
+
+  response = sanitizeResponse(response);
+  if (!response) response = "Désolé, je n'ai pas de réponse pour le moment.";
+  addMessage('ai', response);
+  liveText.textContent = '';
+  speak(response);
+}
+
+/* =============================================================
+   Nettoyage défensif : enlève URL, markdown, préfixes parasites
+   au cas où le LLM aurait recopié le format brut.
+============================================================= */
+function sanitizeResponse(text) {
+  if (!text) return '';
+  let s = String(text);
+
+  // Préfixes parasites courants
+  s = s.replace(/^\s*(résultats?\s+de\s+(la\s+)?recherche(\s+web)?\s*:?)/i, '');
+  s = s.replace(/^\s*(d'après\s+les\s+résultats[^,.]*[,.])\s*/i, '');
+  s = s.replace(/résultat\s*\d+\s*[—:\-]\s*/gi, '');
+
+  // Liens markdown [texte](url) → texte
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '$1');
+
+  // URLs nues
+  s = s.replace(/https?:\/\/\S+/g, '');
+
+  // Crochets / accolades / blocs de code restants
+  s = s.replace(/[\[\]\{\}`]/g, '');
+
+  // Markdown : gras, italique, headers
+  s = s.replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1');
+  s = s.replace(/_{2,3}([^_]+)_{2,3}/g, '$1');
+  s = s.replace(/^#+\s*/gm, '');
+
+  // Tirets de liste en début de ligne / numérotations
+  s = s.replace(/^\s*[-•*]\s+/gm, '');
+  s = s.replace(/^\s*\d+[\.\)]\s+/gm, '');
+
+  // Espaces / sauts de ligne multiples
+  s = s.replace(/\s{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+
+  return s;
+}
+
+function fallbackResponse(prompt) {
+  const p = prompt.toLowerCase();
+  if (p.includes('bonjour') || p.includes('salut')) return "Bonjour ! Comment puis-je vous aider ?";
+  if (p.includes('comment') && p.includes('vas')) return "Je vais bien, merci ! Et vous ?";
+  if (p.includes('nom') || p.includes("t'appelles")) return "Je suis un assistant vocal en mode dégradé. Activez Gemini Nano pour de meilleures réponses.";
+  if (p.includes('merci')) return "Avec plaisir !";
+  if (p.includes('au revoir') || p.includes('à bientôt')) return "À bientôt !";
+  return "Je vous ai entendu, mais Gemini Nano n'est pas disponible. Activez les flags Chrome pour des réponses complètes.";
+}
+
+/* =============================================================
+   Speech synthesis (texte → voix)
+============================================================= */
+let voices = [];
+function loadVoices() {
+  voices = speechSynthesis.getVoices();
+}
+loadVoices();
+if (typeof speechSynthesis !== 'undefined') {
+  speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function pickFrenchVoice() {
+  if (!voices.length) voices = speechSynthesis.getVoices();
+  // Prefer Google French / natural voices
+  const preferred = [
+    /google.*français/i,
+    /google.*french/i,
+    /amélie/i,
+    /thomas/i,
+    /audrey/i,
+    /^fr-FR/i
+  ];
+  for (const pattern of preferred) {
+    const v = voices.find(v => pattern.test(v.name) || pattern.test(v.lang));
+    if (v) return v;
+  }
+  return voices.find(v => v.lang && v.lang.startsWith('fr')) || null;
+}
+
+function stripForSpeech(text) {
+  // Retire les emojis et symboles graphiques pour qu'ils ne soient pas prononcés
+  return text
+    // Émojis Unicode (plages principales)
+    .replace(/[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\u{1F100}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F910}-\u{1F96B}\u{1F980}-\u{1F9E0}]/gu, '')
+    // Sélecteurs de variation, ZWJ, drapeaux régionaux
+    .replace(/[\u{FE00}-\u{FE0F}\u{200D}\u{1F1E6}-\u{1F1FF}]/gu, '')
+    // Astérisques et tirets de liste en début de ligne
+    .replace(/^[\s]*[\*\-•]\s+/gm, '')
+    .replace(/\*+/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function speak(text) {
+  if (!('speechSynthesis' in window)) {
+    setState(State.IDLE, 'En attente…');
+    return;
+  }
+  speechSynthesis.cancel();
+
+  const cleanText = stripForSpeech(text);
+  const u = new SpeechSynthesisUtterance(cleanText);
+  u.lang = 'fr-FR';
+  u.rate = 1.0;
+  u.pitch = 1.05;
+  u.volume = 1.0;
+  const voice = pickFrenchVoice();
+  if (voice) u.voice = voice;
+
+  u.onstart = () => {
+    setState(State.SPEAKING, 'En train de parler…');
+    animateMouthSpeaking();
+  };
+  u.onend = () => {
+    setMouth(0);
+    setState(State.IDLE, 'En attente…');
+    liveText.textContent = 'Cliquez sur le micro pour répondre.';
+  };
+  u.onerror = (e) => {
+    console.error('TTS error:', e);
+    setMouth(0);
+    setState(State.IDLE, 'En attente…');
+  };
+
+  speechSynthesis.speak(u);
+}
+
+/* =============================================================
+   UI events
+============================================================= */
+micBtn.addEventListener('click', () => {
+  if (!recognition) return;
+  if (listening) {
+    recognition.stop();
+    return;
+  }
+  // Stop any ongoing speech
+  if (speechSynthesis.speaking) speechSynthesis.cancel();
+  try {
+    recognition.start();
+  } catch (e) {
+    console.warn('Already started?', e);
+  }
+});
+
+stopBtn.addEventListener('click', () => {
+  if (speechSynthesis.speaking) speechSynthesis.cancel();
+  if (listening && recognition) recognition.stop();
+  setMouth(0);
+  setState(State.IDLE, 'En attente…');
+  liveText.textContent = '';
+});
+
+clearBtn.addEventListener('click', () => {
+  messagesEl.innerHTML = '';
+  addMessage('system', 'Conversation effacée. Cliquez sur le micro pour démarrer.');
+});
+
+/* === Modale de configuration Brave === */
+const settingsBtn       = document.getElementById('settingsBtn');
+const settingsModal     = document.getElementById('settingsModal');
+const keyInput          = document.getElementById('keyInput');
+const saveSettingsBtn   = document.getElementById('saveSettingsBtn');
+const cancelSettingsBtn = document.getElementById('cancelSettingsBtn');
+const testBraveBtn      = document.getElementById('testGoogleBtn'); // id conservé
+const testResult        = document.getElementById('testResult');
+
+settingsBtn.addEventListener('click', () => {
+  keyInput.value = braveKey;
+  testResult.textContent = '';
+  testResult.className = 'modal-test-result';
+  settingsModal.hidden = false;
+});
+
+cancelSettingsBtn.addEventListener('click', () => {
+  settingsModal.hidden = true;
+});
+
+settingsModal.addEventListener('click', (e) => {
+  if (e.target === settingsModal) settingsModal.hidden = true;
+});
+
+saveSettingsBtn.addEventListener('click', () => {
+  saveBraveKey(keyInput.value);
+  settingsModal.hidden = true;
+  if (braveKey) addMessage('system', '✅ Brave Search configuré.');
+  else          addMessage('system', 'ℹ️ Brave Search désactivé (clé vide).');
+});
+
+testBraveBtn.addEventListener('click', async () => {
+  const prev = braveKey;
+  braveKey = keyInput.value.trim();
+
+  testResult.textContent = '⏳ Test en cours…';
+  testResult.className = 'modal-test-result';
+
+  const r = await braveSearch('test');
+  if (r.ok) {
+    testResult.textContent = `✓ OK — ${r.count ?? 0} résultats reçus.`;
+    testResult.className = 'modal-test-result ok';
+  } else {
+    testResult.textContent = `✗ Échec : ${r.error}`;
+    testResult.className = 'modal-test-result err';
+    braveKey = prev;
+  }
+});
+
+function showCompatWarn(text) {
+  compatWarn.textContent = text;
+  compatWarn.classList.add('show');
+}
+
+/* =============================================================
+   Init
+============================================================= */
+initAI();
+setState(State.IDLE, 'En attente…');
+</script>
+</body>
+</html>
