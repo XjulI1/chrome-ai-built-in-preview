@@ -468,20 +468,46 @@
       });
     }
 
+    async function pickImage() {
+      if (!('LanguageModel' in self)) {
+        setOutput('LanguageModel', '⚠️ LanguageModel absent. Active chrome://flags/#prompt-api-for-gemini-nano-multimodal-input et redémarre Chrome.');
+        return;
+      }
+      try {
+        const status = await LanguageModel.availability({ expectedInputs: [{ type: 'image' }] });
+        if (status === 'unavailable' || status === 'no') {
+          setOutput('LanguageModel', `⚠️ Mode multimodal indisponible (availability="${status}"). Vérifie chrome://flags/#prompt-api-for-gemini-nano-multimodal-input et que tu utilises Chrome Canary/Dev récent.`);
+          return;
+        }
+        if (status !== 'available' && status !== 'readily-available') {
+          setOutput('LanguageModel', `ℹ️ Modèle multimodal "${status}" — il sera téléchargé après sélection de l'image (plusieurs centaines de Mo).`);
+        } else {
+          setOutput('LanguageModel', '📂 Sélectionne une image…');
+        }
+      } catch (e) {
+        setOutput('LanguageModel', `❌ ${e.name}: ${e.message}`);
+        return;
+      }
+      const input = $('#pm-image');
+      input.value = ''; // permet de re-sélectionner le même fichier
+      input.click();
+    }
+
     async function runPromptImage() {
       const file = $('#pm-image').files[0];
-      if (!file) { $('#pm-image').click(); return; }
+      if (!file) { await pickImage(); return; }
       await guard('LanguageModel', async () => {
         if (promptSession) { try { promptSession.destroy(); } catch {} }
         promptSession = await LanguageModel.create({
-          expectedInputs: [{ type: 'text' }, { type: 'image' }],
+          expectedInputs: [{ type: 'image' }],
           monitor: monitor('LanguageModel'),
         });
         const prompt = $('#pm-input').value || 'Décris cette image en français.';
+        const bitmap = await createImageBitmap(file);
         const res = await promptSession.prompt([
           { role: 'user', content: [
             { type: 'text', value: prompt },
-            { type: 'image', value: file },
+            { type: 'image', value: bitmap },
           ]},
         ]);
         setOutput('LanguageModel', res);
@@ -609,7 +635,7 @@
     const ACTIONS = {
       prompt: () => runPrompt(false),
       promptStream: () => runPrompt(true),
-      promptImage: () => $('#pm-image').click(),
+      promptImage: () => runPromptImage(),
       promptClear: () => { if (promptSession) { try { promptSession.destroy(); } catch {} } promptSession = null; setOutput('LanguageModel', 'Session détruite.'); },
       summarize: () => runSummarize(false),
       summarizeStream: () => runSummarize(true),

@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Transformers.js — Test des pipelines</title>
+  <script>window.coi = { coepCredentialless: true };</script>
+  <script src="coi-serviceworker.min.js"></script>
   <style>
     :root {
       --bg: #0f1115;
@@ -218,7 +220,7 @@
       <article class="card" data-api="language-detection">
         <h2>🔍 Language Detection <span class="badge" data-status>—</span></h2>
         <p class="desc">Détecte la langue du texte (XLM-RoBERTa fine-tuné).</p>
-        <p class="model">Modèle : <span data-model>Xenova/xlm-roberta-base-language-detection</span></p>
+        <p class="model">Modèle : <span data-model>onnx-community/language_detection-ONNX</span></p>
         <label>Texte
           <textarea id="ld-input">Guten Tag, wie geht es Ihnen heute?</textarea>
         </label>
@@ -322,7 +324,7 @@
       { key: 'text-generation',         model: 'HuggingFaceTB/SmolLM2-360M-Instruct' },
       { key: 'summarization',           model: 'Xenova/distilbart-cnn-6-6' },
       { key: 'translation',             model: 'Xenova/nllb-200-distilled-600M' },
-      { key: 'language-detection',      model: 'Xenova/xlm-roberta-base-language-detection', task: 'text-classification' },
+      { key: 'language-detection',      model: 'onnx-community/language_detection-ONNX', task: 'text-classification' },
       { key: 'sentiment-analysis',      model: 'Xenova/distilbert-base-uncased-finetuned-sst-2-english', task: 'text-classification' },
       { key: 'zero-shot-classification',model: 'Xenova/mobilebert-uncased-mnli' },
       { key: 'question-answering',      model: 'Xenova/distilbert-base-cased-distilled-squad' },
